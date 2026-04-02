@@ -1,70 +1,157 @@
-# FAIR-NAMs-Squad 🐁🦉⚙️
+# Research Swarm 🐁🦉⚙️
 
-**An Autonomous Multi-Agent Swarm for Regulatory Science & Alternative Methodologies**
+**The Autonomous Multi-Agent Framework for Scientific Discovery & Policy Research**
 
-## 🎯 Complete Overview & Objective
-The `FAIR-NAMs-Squad` is an advanced Multi-Agent System (MAS) built to accelerate the replacement of animal testing in preclinical pharmacology. The primary goal of this repository is to validate **New Approach Methodologies (NAMs)** and **Virtual Control Groups (VCGs)** by focusing on their critical bottleneck: metadata homogenization. 
+> [!TIP]
+> **Zero-Code Domain Adaptation**: Fork this repository, edit `swarm_config.yml`, and watch your specialized AI swarm come to life. No Python modifications required.
 
-Instead of relying on human researchers to manually parse thousands of pages of evolving FDA/EMA guidelines, parse ontologies, and draft technical specs, this repository deploys a "Swarm" of specialized AI Agents. These agents dynamically browse the internet, query scientific databases, validate semantic data structures, and autonomously draft publication-ready regulatory documentation and code schemas.
-
----
-
-## 🦾 The Squad (AI Personas)
-The intelligence of the repository is divided into specialized roles. Rather than one generic AI, the system forces "experts" to debate and logically constrain each other:
-
-| Agent | Icon | Role | Technical Focus |
-| :--- | :---: | :--- | :--- |
-| **Dr. Nexus** | 👑 | **Orchestrator** | Coordinates the swarm. Synthesizes inputs, resolves conflicts between architecture and ethics, and dictates the core thesis of research. |
-| **BioEthos** | 🐁 | **Ethics & Regs** | Ensures all outputs strict adhere to the **3Rs** (Reduction, Replacement, Refinement), EU Directive 2010/63/EU, and current FDA/EMA qualification runways. |
-| **Semantica** | 🦉 | **Ontologist** | Enforces the **FAIR Principles** (Findable, Accessible, Interoperable, Reusable). Maps scientific concepts to JSON-LD, RDF, and PROV-O ontology standards. |
-| **TechLead** | ⚙️ | **Architect** | Turns Semantica's theoretical ontologies into deployable REST APIs and federated deployment structures (e.g., API Platform, Symfony). |
-| **Journalist**| ✍️ | **Observer** | Neutral, professional documentation and reporting. Writes the final Markdown files strictly detailing the observed facts without bias. |
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-## 🗺️ Version 2.0 Architecture (The "Graph")
-The squad is no longer just a static chatbot. It runs on a **LangGraph State Machine**, allowing it to autonomously loop its reasoning through actual python-based software tools:
+## 🎯 The Vision
 
-*   **Live Web Intelligence:** The built-in `search_you_engine` Tool connects the agents to the live internet via **You.com's Search API**. The agents can dynamically fetch the latest FDA news or web documentation before writing.
-*   **Scientific Literature:** The `search_pubmed` Tool connects the agents directly to the NCBI/PubMed database to cite real, peer-reviewed toxicology literature.
-*   **Semantic Validation:** The `check_schema_org` Tool allows agents to programmatically verify if the metadata JSON schemas they are designing actually conform to global web standards.
-*   **Persistent File I/O:** The `write_manuscript_section` Tool allows the AI to autonomously create files and write its research outputs natively into the local `./Drafts/` folder on your hard drive.
+The Research Swarm is a production-grade **Multi-Agent System (MAS)** built on **LangGraph**. It orchestrates a specialized "Squad" of AI experts that autonomously research, debate, and document complex topics. 
+
+While initially developed for **Regulatory Toxicology (FAIR-NAMs-Squad)**, this framework is now fully generalized. Whether you are in **Climate Science**, **Legal Tech**, or **Financial Modeling**, you can deploy a customized swarm by simply defining your personas and tools in a YAML configuration.
+
+### 💎 Core Pillars
+
+*   🛡️ **Scientific Rigor**: Built-in adversarial review loops (Reviewer-2) to eliminate hype and enforce objective tone.
+*   📋 **Epistemic Traceability**: Every fact is logged in a real-time Traceability Matrix with confidence tags (`[FACT]`, `[INFERENCE]`).
+*   🔌 **Extensible Tooling**: 8+ built-in tools for web search, PubMed, RAG, and persistent file I/O.
+*   🛰️ **Provider Agnostic**: Seamlessly switch between **GPT-4o**, **Claude 3.5**, and **Gemini 2.0**.
 
 ---
 
-## 🛠️ Best Usage & Quickstart
-
-To utilize the Squad optimally, you no longer just "chat" with it. You assign it programmatic execution tasks via the local CLI.
-
-### 1. Configure the Brain & Eyes
-Ensure you have the API keys required to power both the LLM's reasoning engine and the Web Search tools. Create a `.env` file in the root of the repository:
-```env
-OPENAI_API_KEY=sk-your-openai-key-here     # Powers the LangGraph Brain (gpt-4o)
-YOU_API_KEY=your-you-dot-com-key-here      # Powers the Live Search API
-```
-
-### 2. Execute an Autonomous Task
-Use the Python module exactly like a CLI tool to trigger the swarm. Pass complex, multi-step instructions as your prompt:
+## 🚀 Quickstart (5 Minutes)
 
 ```bash
-# Run this from the root of the repository
-python -m automation.main "Have Dr. Nexus search You.com for the absolute latest updates on EMA Virtual Control Groups, ask Semantica to define a metadata mapping for it, and write the output to disk."
+# 1. Clone & Enter
+git clone https://github.com/dhuzard/FAIR-NAMs-Squad.git && cd FAIR-NAMs-Squad
+
+# 2. Automated Setup (Venv + Deps + .env)
+make setup
+
+# 3. Add Keys to .env
+# OPENAI_API_KEY=sk-... 
+# YOU_API_KEY=ydc-... (Optional for web search)
+
+# 4. Run your first autonomous task
+make run PROMPT="Research the latest EMA guidelines on Virtual Control Groups and summarize the findings."
 ```
 
-### 3. Review the Output
-Once the terminal sequence finishes spinning, open the `/Drafts/` folder in the repository. The agents will have autonomously synthesized the real-world data and saved the output as a Markdown file.
+> [!IMPORTANT]
+> **Persistence**: Check the `./Drafts/` folder after a run to see the Markdown reports generated by the swarm.
+
+---
+
+## 🏗️ Generalization Architecture
+
+The system is designed with a strict separation between **Orchestration Logic** and **Domain Knowledge**.
+
+### 1. The Control Surface: `swarm_config.yml`
+Everything from persona icons to the adversarial reviewer's "banned words" list is controlled here. 
+
+```yaml
+reviewer:
+  banned_words: ["revolutionary", "game-changing", "groundbreaking"]
+  required_elements: ["DOI citations", "Methodology section"]
+  tone: "measured, evidence-based scientific analysis"
+```
+
+### 2. The Persona Layer
+Drop Markdown files into `agents/*/persona.md` to define expertise. The system injects these into the agents' prompts at runtime.
+
+### 3. The "Graph" Loop
+```mermaid
+graph LR
+    START((START)) --> Agent[Squad Agent]
+    Agent --> ToolCalls{Tool Calls?}
+    ToolCalls -- Yes --> Tools[Execute Tools]
+    Tools --> Agent
+    ToolCalls -- No --> Reviewer[Reviewer-2]
+    Reviewer -- REJECTED --> Agent
+    Reviewer -- APPROVED --> END((END))
+```
+
+---
+
+## 👥 Persona Squad (Toxicology Default)
+
+| Agent | Icon | Role | Technical Focus |
+| :--- | :--- | :--- | :--- |
+| **Dr. Nexus** | 👑 | **Orchestrator** | Coordination, synthesis, and conflict resolution. |
+| **BioEthos** | 🐁 | **Ethics & Regs** | Animal welfare (3Rs), FDA/EMA regulatory alignment. |
+| **Semantica** | 🦉 | **Ontologist** | FAIR Principles, JSON-LD, and semantic validation. |
+| **TechLead** | ⚙️ | **Architect** | Turning requirements into deployable system specs. |
+| **Journalist**| ✍️ | **Observer** | Neutral, professional documentation and reporting. |
+
+---
+
+## 🔧 Swiss-Army Tooling
+
+| Tool | Capability | Purpose |
+| :--- | :--- | :--- |
+| 🔍 `search_you_engine` | **Web Intelligence** | Real-time web search via You.com API. |
+| 📚 `search_pubmed` | **Literature** | Direct query of NCBI/PubMed/EuropePMC. |
+| 📄 `scrape_webpage` | **Deep Reading** | Extracts full-text content from any discovered URL. |
+| 🧠 `search_kb` | **Local RAG** | Searches your custom PDF/MD documents in agent KB folders. |
+| ✍️ `write_section` | **Persistence** | Autonomously writes files to local disk. |
+| 🔄 `git_snapshot` | **Version Control** | Auto-commits changes for a verifiable audit trail. |
+
+---
+
+## 🌍 Domain Scaffolding
+
+Want to use this for another field? Use the built-in scaffolding tool:
+
+```bash
+make scaffold DOMAIN="Legal Tech"
+```
+
+### Ready-to-Use Examples:
+Check the [`examples/`](examples/) folder for pre-built configurations:
+- 📁 **[Legal Tech](examples/legal_tech/)**: Case law research and brief assembly.
+- 📁 **[Climate Science](examples/climate_science/)**: Policy analysis and dataset synthesis.
+- 📁 **[Financial Modeling](examples/financial_modeling/)**: Risk assessment and market reporting.
 
 ---
 
 ## 📂 Repository Layout
 
-*   `automation/main.py`: The entry-point for the LangGraph framework.
-*   `automation/graph.py`: The State-Machine routing logic dictating how the LLM functions.
-*   `automation/tools.py`: The Python functions granting the AI its API capabilities (You.com, PubMed, Disk Read/Write).
-*   `schemas/`: Ground-truth executable `.jsonld` reference models designed by the squad.
-*   `Drafts/`: The automated output directory for generated papers and summaries.
+*   `automation/main.py`: The entry-point CLI.
+*   `automation/graph.py`: The State-Machine routing logic.
+*   `automation/config.py`: The dynamic prompt injection engine.
+*   `agents/`: Personas and local Knowledge Bases (KB).
+*   `Drafts/`: The automated output directory.
+*   `Knowledge_Traceability_Matrix.md`: The real-time audit log of knowledge claims.
 
 ---
 
-## 🚀 Further Development
-The goal is to move beyond writing articles into developing actual microservices. For information on where the project is heading (e.g., automated execution of SHACL validation, automated lineage matrices), please check the [Future Roadmap](Future_Improvements_TODO.md).
+## 🐳 Docker Support
+
+Deploy the entire swarm in a containerized environment:
+
+```bash
+docker compose build
+docker compose run swarm execute "Research the impact of microplastics on human health."
+```
+
+---
+
+## 🚀 CLI Power-User Reference
+
+| Command | Action |
+| :--- | :--- |
+| `python -m automation.main execute "..."` | Trigger a new autonomous research task. |
+| `python -m automation.main info` | Visual summary of current config, personas, and tools. |
+| `python -m automation.main scaffold "NAME"` | Bootstrap a new domain configuration. |
+| `python -m automation.ingest` | Vectorize PDFs/docs in `agents/*/KB/` into the local vector DB. |
+
+---
+
+## 📄 License
+
+Distributed under the **MIT License**. See `LICENSE` for more information.

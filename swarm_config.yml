@@ -1,0 +1,181 @@
+# ═══════════════════════════════════════════════════════════════
+# swarm_config.yml — THE user-facing control surface
+# ═══════════════════════════════════════════════════════════════
+# This file defines EVERYTHING about your research swarm:
+# personas, tools, LLM backend, reviewer constraints, and prompts.
+# Fork this repo → edit this file → run your own domain-specific swarm.
+# You should NEVER need to edit Python code to customize behavior.
+# ═══════════════════════════════════════════════════════════════
+
+# ── Swarm Identity ───────────────────────────────────
+swarm:
+  name: "FAIR-NAMs-Squad"
+  description: "Autonomous Research Swarm for Regulatory Toxicology & New Approach Methodologies"
+  output_dir: "./Drafts"
+  traceability_matrix: "./Knowledge_Traceability_Matrix.md"
+
+# ── LLM Backend ─────────────────────────────────────
+# Supported providers: openai, anthropic, google
+model:
+  provider: "openai"
+  name: "gpt-4o"
+  temperature: 0.2
+  env_key: "OPENAI_API_KEY"
+
+# ── Personas ─────────────────────────────────────────
+# Each persona has a name, icon, role description, a persona file
+# loaded at runtime (the persona.md in agents/), and a list of
+# tool keys (from the tools section below) they are allowed to use.
+personas:
+  - name: "Dr. Nexus"
+    icon: "👑"
+    role: "Orchestrator & Synthesizer"
+    persona_file: "./agents/DrNexus/persona.md"
+    tools:
+      - search_web
+      - search_literature
+      - search_kb
+      - append_traceability
+
+  - name: "BioEthos"
+    icon: "🐁"
+    role: "Ethics & Regulatory Officer"
+    persona_file: "./agents/BioEthos/persona.md"
+    tools:
+      - search_literature
+      - search_web
+      - search_kb
+
+  - name: "Semantica"
+    icon: "🦉"
+    role: "Ontologist & FAIR Data Expert"
+    persona_file: "./agents/Semantica/persona.md"
+    tools:
+      - check_schema_org
+      - search_web
+      - search_kb
+
+  - name: "TechLead"
+    icon: "⚙️"
+    role: "Architect & Implementation Lead"
+    persona_file: "./agents/TechLead/persona.md"
+    tools:
+      - search_web
+      - search_kb
+
+  - name: "Journalist"
+    icon: "✍️"
+    role: "Observer & Scribe"
+    persona_file: "./agents/Journalist/persona.md"
+    tools:
+      - write_section
+      - append_traceability
+      - git_snapshot
+
+# ── Tools Registry ───────────────────────────────────
+# Map logical tool names to Python module + function.
+# To add a custom tool: create a Python function decorated
+# with @tool, then register it here.
+tools:
+  search_literature:
+    module: "automation.tools"
+    function: "search_pubmed"
+    description: "Search PubMed for peer-reviewed biomedical literature"
+
+  search_web:
+    module: "automation.tools"
+    function: "search_you_engine"
+    description: "Search the live web via You.com API"
+
+  check_schema_org:
+    module: "automation.tools"
+    function: "check_schema_org"
+    description: "Validate terms against the Schema.org vocabulary"
+
+  write_section:
+    module: "automation.tools"
+    function: "write_manuscript_section"
+    description: "Write a drafted section to disk as Markdown"
+
+  append_traceability:
+    module: "automation.tools"
+    function: "append_traceability_matrix"
+    description: "Log a fact and its source to the Knowledge Traceability Matrix"
+
+  search_kb:
+    module: "automation.tools"
+    function: "search_knowledge_base"
+    description: "Search the local vectorized Knowledge Base documents"
+
+  scrape_page:
+    module: "automation.tools"
+    function: "scrape_webpage"
+    description: "Fetch and extract full text content from a URL"
+
+  git_snapshot:
+    module: "automation.tools"
+    function: "git_commit_snapshot"
+    description: "Auto-commit all changes for a version-controlled audit trail"
+
+# ── Reviewer-2 (Adversarial Checkpoint) ──────────────
+# The Reviewer gates all final outputs. Customize its
+# constraints for your domain.
+reviewer:
+  enabled: true
+  max_revision_loops: 3
+
+  # Words that trigger automatic rejection
+  banned_words:
+    - "groundbreaking"
+    - "revolutionary"
+    - "game-changing"
+    - "paradigm-shifting"
+    - "unprecedented"
+
+  # Structural elements the output MUST contain
+  required_elements:
+    - "in-text citations (e.g., [1], [2])"
+    - "a formal 'References' or 'Reference List' section at the bottom"
+
+  # Tone enforcement
+  tone: "strictly factual, objective, and neutral"
+
+  # Optional: Override the auto-generated reviewer prompt entirely.
+  # Uncomment and edit to use a fully custom reviewer.
+  # custom_prompt: |
+  #   You are a financial compliance reviewer. You read the agent's output.
+  #   If the output contains forward-looking statements without disclaimers,
+  #   or if projections are not clearly labeled as estimates, REJECT it.
+
+# ── Epistemic Tags ───────────────────────────────────
+# Tags used to classify knowledge claims in the traceability matrix.
+# Customize these to fit your domain's epistemology.
+epistemic_tags:
+  - "[FACT]"
+  - "[INFERENCE]"
+  - "[SPECULATION]"
+
+# ── System Prompt Template ───────────────────────────
+# Jinja2 template assembled at runtime. Uses variables from above.
+# Edit this to change how the swarm introduces itself to the LLM.
+system_prompt_template: |
+  You are the {{ swarm.name }}, an orchestration of specialist agents:
+  {%- for p in personas %}
+  - {{ p.icon }} **{{ p.name }}** ({{ p.role }}){% if p.content %}
+    {{ p.content | truncate(300) }}{% endif %}
+  {%- endfor %}
+
+  CRITICAL DIRECTIVE: Whenever you search the web or literature for facts,
+  you MUST immediately call the 'append_traceability_matrix' tool to log
+  your findings using a strict epistemic tag from: {{ epistemic_tags | join(', ') }}
+  before you proceed to answering.
+
+  MANDATORY FORMATTING: When generating your final structured response or
+  writing to disk, you MUST include formal academic in-text citations
+  (e.g., [1], [2]) and a complete formal 'References' section at the bottom
+  containing the extracted URLs or PMIDs.
+
+  You have tools to search literature, validate schemas, search the live web,
+  search your local knowledge base, scrape full web pages, log traceability
+  matrices, write draft sections to disk, and commit snapshots to git.
+  Use your tools to fulfill the user request precisely.

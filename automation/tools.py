@@ -10,14 +10,15 @@ To add a custom tool:
   3. Assign it to one or more persona's tool lists
 
 Built-in Tools:
-  - search_pubmed         : Search PubMed for peer-reviewed biomedical literature
-  - check_schema_org      : Validate terms against Schema.org vocabulary
-  - write_manuscript_section : Write a Markdown section to the Drafts/ directory
-  - search_you_engine     : Search the live web via You.com API
+  - search_pubmed              : Search PubMed and return full title + abstract
+  - search_semantic_scholar    : Search Semantic Scholar (indexes preprints + journals)
+  - check_schema_org           : Validate terms against Schema.org vocabulary
+  - write_manuscript_section   : Write a Markdown section to the Drafts/ directory
+  - search_you_engine          : Search the live web via You.com API
   - append_traceability_matrix : Log a fact to the Knowledge Traceability Matrix
-  - search_knowledge_base : Search local vectorized KB documents (bridges ingest.py)
-  - scrape_webpage        : Fetch full text content from a URL
-  - git_commit_snapshot   : Auto-commit changes for version-controlled audit trail
+  - search_knowledge_base      : Search local vectorized KB documents
+  - scrape_webpage             : Fetch full text content from a URL
+  - git_commit_snapshot        : Auto-commit output files for version-controlled audit trail
 """
 
 import os
@@ -34,8 +35,12 @@ from langchain_core.tools import tool
 
 @tool
 def search_pubmed(query: str, max_results: int = 3) -> str:
-    """Searches PubMed for a given query and returns formatted abstracts.
-    Use this to find peer-reviewed literature dynamically."""
+    """Searches PubMed for a given query and returns title, journal, PMID,
+    and full abstract for each result. Use this for peer-reviewed biomedical
+    literature. If results are empty or abstracts are missing, follow up with
+    search_semantic_scholar or search_web for preprints and recent papers."""
+    import xml.etree.ElementTree as ET
+
     base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
     try:
         search_resp = requests.get(
@@ -50,30 +55,156 @@ def search_pubmed(query: str, max_results: int = 3) -> str:
         search_resp.raise_for_status()
         id_list = search_resp.json().get("esearchresult", {}).get("idlist", [])
         if not id_list:
-            return "No results found on PubMed for this query."
+            return (
+                "No results found on PubMed for this query. "
+                "Try search_semantic_scholar or search_web for preprints and 2024–2026 papers."
+            )
 
-        summary_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
-        summary_resp = requests.get(
-            summary_url,
+        # Fetch full records including abstracts via efetch
+        fetch_resp = requests.get(
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
             params={
                 "db": "pubmed",
                 "id": ",".join(id_list),
-                "retmode": "json",
+                "rettype": "abstract",
+                "retmode": "xml",
             },
         )
-        summary_resp.raise_for_status()
-        result = summary_resp.json().get("result", {})
+        fetch_resp.raise_for_status()
 
+        root = ET.fromstring(fetch_resp.text)
         output = []
-        for uid in id_list:
-            item = result.get(uid, {})
-            title = item.get("title", "No Title")
-            source = item.get("source", "Unknown Source")
-            output.append(f"Title: {title}\nJournal: {source}\nPMID: {uid}")
 
-        return "\n\n".join(output)
+        for article in root.findall(".//PubmedArticle"):
+            citation = article.find("MedlineCitation")
+            if citation is None:
+                continue
+
+            pmid_el = citation.find("PMID")
+            pmid = pmid_el.text if pmid_el is not None else "Unknown"
+
+            art = citation.find("Article")
+            if art is None:
+                continue
+
+            title_el = art.find("ArticleTitle")
+            title = "".join(title_el.itertext()) if title_el is not None else "No title"
+
+            journal_el = art.find("Journal/Title")
+            journal = journal_el.text if journal_el is not None else "Unknown journal"
+
+            year_el = art.find(".//PubDate/Year")
+            year = year_el.text if year_el is not None else ""
+
+            # AbstractText may be a single element or multiple labelled sections
+            abstract_parts = []
+            for ab in art.findall(".//AbstractText"):
+                label = ab.get("Label")
+                text = "".join(ab.itertext()).strip()
+                if label:
+                    abstract_parts.append(f"{label}: {text}")
+                elif text:
+                    abstract_parts.append(text)
+            abstract = " ".join(abstract_parts) if abstract_parts else "No abstract available."
+
+            output.append(
+                f"Title: {title}\n"
+                f"Journal: {journal} ({year})\n"
+                f"PMID: {pmid}\n"
+                f"Abstract: {abstract}"
+            )
+
+        if not output:
+            return (
+                "PubMed returned records but abstracts could not be parsed. "
+                "Try search_semantic_scholar for this query."
+            )
+
+        return "\n\n---\n\n".join(output)
+
     except Exception as e:
         return f"Error querying PubMed: {e}"
+
+
+@tool
+def search_semantic_scholar(query: str, max_results: int = 5) -> str:
+    """Searches Semantic Scholar for academic papers including preprints, conference
+    papers, and journal articles. Unlike PubMed, Semantic Scholar indexes arXiv,
+    bioRxiv, CHI, and recent 2024–2026 papers that may not yet appear on PubMed.
+
+    Use this when search_pubmed returns no results, or when you need preprints,
+    AI/HCI conference papers, or very recent publications.
+
+    Args:
+        query: Search terms (e.g., 'AI chatbot dependence problematic use 2025').
+        max_results: Number of results to return (default 5, max 10).
+    """
+    url = "https://api.semanticscholar.org/graph/v1/paper/search"
+    params = {
+        "query": query,
+        "limit": min(max_results, 10),
+        "fields": "title,abstract,year,authors,externalIds,venue,url",
+    }
+    headers = {"User-Agent": "PIU-Psych-Swarm/1.0 (Academic Research)"}
+
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+
+        papers = data.get("data", [])
+        if not papers:
+            return (
+                f"No results found on Semantic Scholar for: '{query}'. "
+                "Try search_web or a shorter query."
+            )
+
+        output = []
+        for paper in papers:
+            title = paper.get("title", "No title")
+            year = paper.get("year", "n.d.")
+            venue = paper.get("venue", "")
+            authors = ", ".join(
+                a.get("name", "") for a in paper.get("authors", [])[:3]
+            )
+            if len(paper.get("authors", [])) > 3:
+                authors += " et al."
+
+            ext_ids = paper.get("externalIds", {})
+            doi = ext_ids.get("DOI", "")
+            arxiv = ext_ids.get("ArXiv", "")
+            s2_url = paper.get("url", "")
+
+            abstract = paper.get("abstract") or "No abstract available."
+            # Cap abstract at 600 chars to keep output manageable
+            if len(abstract) > 600:
+                abstract = abstract[:600] + "…"
+
+            id_line = " | ".join(filter(None, [
+                f"DOI: {doi}" if doi else "",
+                f"arXiv: {arxiv}" if arxiv else "",
+                s2_url,
+            ]))
+
+            output.append(
+                f"Title: {title}\n"
+                f"Authors: {authors}\n"
+                f"Year: {year} | Venue: {venue}\n"
+                f"IDs: {id_line}\n"
+                f"Abstract: {abstract}"
+            )
+
+        return "\n\n---\n\n".join(output)
+
+    except requests.exceptions.HTTPError as e:
+        if e.response is not None and e.response.status_code == 429:
+            return (
+                "Semantic Scholar rate limit hit. Wait a moment and retry, "
+                "or use search_web as an alternative."
+            )
+        return f"Semantic Scholar HTTP error: {e}"
+    except Exception as e:
+        return f"Error querying Semantic Scholar: {e}"
 
 
 @tool
@@ -331,26 +462,41 @@ def search_knowledge_base(query: str, agent_name: str = "all", top_k: int = 5) -
 
 @tool
 def git_commit_snapshot(message: str) -> str:
-    """Creates a git commit of all current changes in the repository.
-    Use this after writing files to disk to preserve a versioned audit trail
-    of the swarm's work. The commit message should describe what was produced.
+    """Creates a git commit of swarm output files only (Drafts/ directory and the
+    Knowledge Traceability Matrix). Stages only known safe paths — never the full
+    working tree — to prevent accidentally committing credentials or binaries.
+
+    Use this after write_manuscript_section to lock in a versioned audit snapshot.
 
     Args:
-        message: Descriptive commit message summarizing the changes.
+        message: Descriptive commit message summarizing what was produced.
     """
-    repo_root = os.path.join(os.path.dirname(__file__), "..")
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    # Determine safe staging paths from config (fall back to defaults)
+    try:
+        from automation.config import load_config
+        cfg = load_config()
+        output_dir = cfg["swarm"].get("output_dir", "./Drafts").lstrip("./")
+        matrix = cfg["swarm"].get(
+            "traceability_matrix", "./Knowledge_Traceability_Matrix.md"
+        ).lstrip("./")
+    except Exception:
+        output_dir = "Drafts"
+        matrix = "Knowledge_Traceability_Matrix.md"
+
+    safe_paths = [output_dir, matrix]
 
     try:
-        # Stage all changes
+        # Stage only the swarm's output paths — never git add -A
         subprocess.run(
-            ["git", "add", "-A"],
+            ["git", "add", "--", *safe_paths],
             cwd=repo_root,
             capture_output=True,
             text=True,
             check=True,
         )
 
-        # Check if there are staged changes
         status = subprocess.run(
             ["git", "diff", "--cached", "--stat"],
             cwd=repo_root,
@@ -359,9 +505,8 @@ def git_commit_snapshot(message: str) -> str:
         )
 
         if not status.stdout.strip():
-            return "No changes to commit."
+            return "No changes to commit in swarm output paths."
 
-        # Commit with the agent's message
         result = subprocess.run(
             ["git", "commit", "-m", f"[swarm-auto] {message}"],
             cwd=repo_root,

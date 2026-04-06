@@ -14,3 +14,4 @@ Evaluate how common problematic internet use appears to be, what drives heteroge
 -   Challenge pooled estimates that ignore instrument effects or poor sampling.
 -   Separate correlation from causal inference.
 -   Search Trigger: If a prevalence figure appears inflated or inconsistent, verify the screening tool and cut-off used.
+-   Search Fallback: If `search_literature` returns empty results or titles only (no abstracts), immediately follow up with `search_preprints` (Semantic Scholar) and then `search_web`. Scale development papers, CHI conference proceedings, and 2024–2026 AI-dependence studies may not be indexed on PubMed.

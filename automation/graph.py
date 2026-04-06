@@ -11,9 +11,9 @@ message history or all persona files to every node.
 
 Graph topology
 --------------
-  START → orchestrator ─┬→ specialist_A ─┐
-                         ├→ specialist_B ─┤  (all specialists return to orchestrator)
-                         ├→ ...           ┘
+  START → orchestrator ─┬→ specialist_A ──────────────────────────┐
+                         ├→ [specialist_B + specialist_C] (parallel)┤ → orchestrator
+                         ├→ ...                                    ┘
                          └→ Journalist → reviewer ─→ END
                                   ↑              ↘ Journalist (on rejection)
 
@@ -23,7 +23,7 @@ Token strategy (per call)
   Specialist    : its persona prompt + task + orchestrator instructions
                   + peer findings capped at MAX_PEER_CHARS chars each
   Journalist    : its persona prompt + task + full uncompressed findings
-  Reviewer      : reviewer prompt + journalist draft only
+  Reviewer      : reviewer prompt + journalist draft only (not full history)
 """
 
 from typing import Annotated, TypedDict
@@ -31,12 +31,14 @@ from typing import Annotated, TypedDict
 from pydantic import BaseModel
 from langgraph.graph import StateGraph, END, START
 from langgraph.graph.message import add_messages
+from langgraph.types import Send
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langgraph.prebuilt import ToolNode
 
 from automation.config import (
     load_config,
     create_model,
+    create_reviewer_model,
     build_reviewer_prompt,
     get_persona_config,
     load_tools_for_persona,
@@ -61,18 +63,19 @@ class GraphState(TypedDict):
     task              Original user prompt — never mutated after initialisation.
     messages          Append-only audit log of all agent/reviewer messages.
     agent_outputs     {persona_name: latest findings text} — merged across nodes.
-    next_agent        Routing target set by the orchestrator.
-    next_instructions Specific task for the next agent, set by orchestrator or reviewer.
-    agent_call_count  Running count of specialist invocations (safety valve).
+    next_agents       Routing targets set by the orchestrator. One name = sequential;
+                      multiple names = parallel fan-out via Send.
+    next_instructions Shared instruction context for the next agent batch.
+    agent_call_count  Count of specialist invocations only (safety valve).
     reviewer_approved Set True once Reviewer-2 approves the Journalist draft.
     revision_count    Number of Journalist revision cycles completed.
     """
     task: str
     messages: Annotated[list, add_messages]
     agent_outputs: Annotated[dict, _merge_agent_outputs]
-    next_agent: str
+    next_agents: list          # list[str]: specialist names | ["Journalist"] | ["END"]
     next_instructions: str
-    agent_call_count: int
+    agent_call_count: int      # only incremented for specialist dispatches
     reviewer_approved: bool
     revision_count: int
 
@@ -81,8 +84,8 @@ class GraphState(TypedDict):
 
 class OrchestratorDecision(BaseModel):
     reasoning: str
-    next_agent: str    # specialist name | "Journalist" | "END"
-    instructions: str  # specific task handed to the next agent
+    next_agents: list[str]  # one name (sequential) or multiple (parallel fan-out)
+    instructions: str        # shared instruction context for the dispatched batch
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────────
@@ -109,6 +112,10 @@ def _format_findings(agent_outputs: dict, compress: bool = False,
 def _run_tool_loop(model, tools: list, messages: list, max_rounds: int):
     """Run the agent ↔ tools loop until the model stops calling tools.
 
+    Correctly extends the message list on each round so that the full
+    conversation context (system prompt, task, prior tool exchanges) is
+    preserved across iterations.
+
     Returns the final AIMessage response.
     """
     tool_executor = ToolNode(tools)
@@ -118,8 +125,9 @@ def _run_tool_loop(model, tools: list, messages: list, max_rounds: int):
         messages = list(messages) + [response]
         if not (hasattr(response, "tool_calls") and response.tool_calls):
             break
+        # Extend — not replace — so prior context is preserved
         tool_result = tool_executor.invoke({"messages": messages})
-        messages = tool_result["messages"]
+        messages = messages + tool_result["messages"]
     return response
 
 
@@ -130,37 +138,49 @@ def make_orchestrator_node(config: dict, specialist_names: list):
     nexus_cfg = get_persona_config(config, config["orchestrator"]["agent"])
     system_prompt = build_agent_system_prompt(nexus_cfg)
     max_calls = config["orchestrator"].get("max_agent_calls", 8)
-    valid_targets = specialist_names + ["Journalist", "END"]
+    valid_targets = set(specialist_names) | {"Journalist", "END"}
 
     def orchestrator_node(state: GraphState):
         call_count = state.get("agent_call_count", 0)
+        already_consulted = list(state.get("agent_outputs", {}).keys())
 
-        # Safety valve — prevent runaway loops
+        # Safety valve — force to Journalist after too many specialist calls
         if call_count >= max_calls:
             return {
-                "next_agent": "Journalist",
+                "next_agents": ["Journalist"],
                 "next_instructions": (
                     "Synthesise all collected findings into a final structured report. "
-                    "The orchestrator has reached its maximum call count."
+                    "The orchestrator has reached its maximum specialist call count."
                 ),
-                "agent_call_count": call_count + 1,
                 "messages": [AIMessage(content=(
-                    f"[Orchestrator safety valve: {max_calls} agent calls reached. "
+                    f"[Orchestrator safety valve: {max_calls} specialist calls reached. "
                     "Routing directly to Journalist.]"
                 ))],
             }
 
         findings = _format_findings(state.get("agent_outputs", {}))
 
+        # Include already-consulted list so the orchestrator avoids redundant re-routing
+        consulted_note = (
+            f"SPECIALISTS ALREADY CONSULTED: {', '.join(already_consulted)}"
+            if already_consulted else
+            "No specialists consulted yet."
+        )
+
         routing_prompt = (
             f"RESEARCH TASK:\n{state['task']}\n\n"
+            f"{consulted_note}\n\n"
             f"FINDINGS COLLECTED SO FAR:\n{findings}\n\n"
-            f"AVAILABLE SPECIALISTS: {', '.join(specialist_names)}\n\n"
+            f"ALL AVAILABLE SPECIALISTS: {', '.join(specialist_names)}\n\n"
             "Decide the next step:\n"
-            "  • Route to a specialist if more domain-specific evidence is needed.\n"
-            "  • Route to 'Journalist' when sufficient findings are ready to write the output.\n"
-            "  • Route to 'END' only after the Journalist has already produced a complete output.\n"
-            "Return your decision as structured output with: reasoning, next_agent, instructions."
+            "  • Route to one specialist for sequential deep investigation.\n"
+            "  • Route to TWO OR MORE specialists simultaneously if their sub-questions\n"
+            "    are independent (e.g. prevalence + mechanisms can run in parallel).\n"
+            "  • Route to ['Journalist'] when sufficient evidence is ready to write.\n"
+            "  • Route to ['END'] only after the Journalist has already produced output.\n"
+            "  • Do NOT re-route to a specialist already in ALREADY CONSULTED unless\n"
+            "    a specific new sub-question requires it.\n"
+            "Return structured output with: reasoning, next_agents (list), instructions."
         )
 
         model = create_model(config).with_structured_output(OrchestratorDecision)
@@ -169,16 +189,20 @@ def make_orchestrator_node(config: dict, specialist_names: list):
             HumanMessage(content=routing_prompt),
         ])
 
-        # Validate routing target against allowed values
-        if decision.next_agent not in valid_targets:
-            decision.next_agent = "Journalist"
+        # Validate and filter routing targets
+        valid_next = [t for t in decision.next_agents if t in valid_targets]
+        if not valid_next:
+            valid_next = ["Journalist"]
+
+        # Only count specialist dispatches against the call limit
+        specialist_dispatches = [t for t in valid_next if t in specialist_names]
 
         return {
-            "next_agent": decision.next_agent,
+            "next_agents": valid_next,
             "next_instructions": decision.instructions,
-            "agent_call_count": call_count + 1,
+            "agent_call_count": call_count + len(specialist_dispatches),
             "messages": [AIMessage(content=(
-                f"[Orchestrator → {decision.next_agent}]: {decision.reasoning}"
+                f"[Orchestrator → {valid_next}]: {decision.reasoning}"
             ))],
         }
 
@@ -251,7 +275,7 @@ def make_journalist_node(config: dict):
     def journalist_node(state: GraphState):
         model = create_model(config).bind_tools(tools) if tools else create_model(config)
 
-        # Journalist gets full uncompressed findings
+        # Journalist gets full uncompressed findings from all specialists
         full_findings = _format_findings(state.get("agent_outputs", {}))
 
         revision_note = ""
@@ -294,7 +318,7 @@ def make_journalist_node(config: dict):
 # ── Reviewer node ──────────────────────────────────────────────────────────
 
 def make_reviewer_node(config: dict):
-    """Adversarial reviewer that checks the Journalist draft against config rules."""
+    """Adversarial reviewer — uses a separate model config for genuine diversity."""
     reviewer_prompt = build_reviewer_prompt(config)
     max_revisions = config["reviewer"].get("max_revision_loops", 3)
     journalist_name = config["orchestrator"]["journalist"]
@@ -315,7 +339,9 @@ def make_reviewer_node(config: dict):
         if not draft:
             return {"reviewer_approved": True}
 
-        model = create_model(config)
+        # Use reviewer-specific model (higher temperature, optionally different model)
+        # for genuine adversarial diversity rather than the same model as the agents.
+        model = create_reviewer_model(config)
         response = model.invoke([
             SystemMessage(content=reviewer_prompt),
             HumanMessage(content=draft),
@@ -347,6 +373,9 @@ def build_graph(config: dict = None):
     Node registration is fully dynamic — derived from the personas listed in
     swarm_config.yml. Adding or removing specialist agents requires only config
     changes, not Python code changes.
+
+    Parallel fan-out: when the orchestrator sets next_agents to multiple
+    specialist names, they are dispatched concurrently via LangGraph Send.
     """
     if config is None:
         config = load_config()
@@ -379,16 +408,23 @@ def build_graph(config: dict = None):
     # ── Wire edges ──────────────────────────────────────────────────────
     workflow.add_edge(START, "orchestrator")
 
-    # Every specialist returns control to the orchestrator after finishing
+    # Every specialist returns to orchestrator (both sequential and parallel paths)
     for name in specialist_names:
         workflow.add_edge(name, "orchestrator")
 
-    # Orchestrator routing: specialist | Journalist | END→reviewer
-    def orchestrator_router(state: GraphState) -> str:
-        target = state.get("next_agent", "END")
-        if target in specialist_names:
-            return target
-        if target == "Journalist":
+    # Orchestrator routing: sequential | parallel fan-out via Send | Journalist | END
+    specialist_set = set(specialist_names)
+
+    def orchestrator_router(state: GraphState):
+        targets = state.get("next_agents", ["END"])
+        specialist_targets = [t for t in targets if t in specialist_set]
+
+        if len(specialist_targets) > 1:
+            # Parallel fan-out: dispatch multiple specialists simultaneously
+            return [Send(name, state) for name in specialist_targets]
+        elif len(specialist_targets) == 1:
+            return specialist_targets[0]
+        elif "Journalist" in targets:
             return "Journalist"
         return "reviewer" if reviewer_enabled else END
 

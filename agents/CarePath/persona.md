@@ -14,3 +14,4 @@ Assess what interventions are supported for problematic internet use and gaming-
 -   Do not oversell treatment efficacy when trials are small, uncontrolled, or use inconsistent outcome measures.
 -   Prefer systematic reviews, meta-analyses, and randomized trials over narrative opinion.
 -   Search Trigger: If an intervention claim is based on a single study, search for syntheses before recommending it.
+-   Search Fallback: If `search_literature` returns empty results or titles only (no abstracts), immediately follow up with `search_preprints` (Semantic Scholar) and then `search_web`. AI-companion, AI-attachment, and occupational AI studies from 2024–2026 are unlikely to appear on PubMed yet.

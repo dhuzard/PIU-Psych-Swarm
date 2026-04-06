@@ -14,3 +14,4 @@ Distinguish clinically impairing problematic internet use from high but non-path
 -   Clarify whether the source addresses a formal disorder, a screening construct, or broad risk behavior.
 -   Push back on moralizing language or claims that frequency alone proves pathology.
 -   Search Trigger: If diagnostic criteria or comorbidity claims are vague, search reviews or consensus papers before concluding.
+-   Search Fallback: If `search_literature` returns empty results or titles only (no abstracts), immediately follow up with `search_preprints` (Semantic Scholar) and then `search_web`. Many 2024–2026 AI-dependence and chatbot papers are not yet indexed on PubMed.

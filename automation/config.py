@@ -81,7 +81,12 @@ def load_persona_content(persona_file: str) -> str:
 
 
 def build_system_prompt(config: dict) -> str:
-    """Assemble the system prompt from config + persona files via Jinja2."""
+    """Assemble the system prompt from config + persona files via Jinja2.
+
+    LEGACY — not called by the multi-agent supervisor architecture.
+    Each agent node builds its own focused prompt via build_agent_system_prompt().
+    Retained for backward compatibility with custom scripts and examples.
+    """
     # Enrich persona dicts with their loaded file contents
     personas_with_content = []
     for p in config["personas"]:
@@ -275,6 +280,32 @@ def create_model(config: dict) -> Any:
             f"Supported providers: openai, anthropic, google. "
             f"Edit the 'model.provider' key in swarm_config.yml."
         )
+
+
+def create_reviewer_model(config: dict) -> Any:
+    """Create an LLM instance for Reviewer-2, with optional model/temperature override.
+
+    If reviewer.model is defined in swarm_config.yml, those values are merged on top
+    of the main model config — allowing a higher temperature or a different model for
+    genuinely adversarial review rather than the same instance used by the agents.
+
+    Example swarm_config.yml entry::
+
+        reviewer:
+          model:
+            name: "gpt-4o"
+            temperature: 0.8   # higher = more adversarial
+
+    If reviewer.model is absent, falls back to create_model(config).
+    """
+    reviewer_model_overrides = config.get("reviewer", {}).get("model")
+    if not reviewer_model_overrides:
+        return create_model(config)
+
+    # Merge overrides onto the base model config
+    merged_model_cfg = {**config["model"], **reviewer_model_overrides}
+    reviewer_config = {**config, "model": merged_model_cfg}
+    return create_model(reviewer_config)
 
 
 def validate_env(config: dict) -> list[str]:

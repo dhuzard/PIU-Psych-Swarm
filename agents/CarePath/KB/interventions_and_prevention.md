@@ -40,3 +40,35 @@ Preventive Interventions for Internet Addiction in Young Children: Systematic Re
 Summary:
 -   Reviews prevention efforts in children younger than 12 years.
 -   Useful for early prevention framing and family- or school-level intervention design.
+
+## AI-Chatbot Use: Clinical and Preventive Implications (2025–2026)
+
+### Lee et al. 2026
+Lee [first author], et al. Negotiating Relationships with ChatGPT. *[Journal/Conference TBC]*. 2026.
+
+Summary:
+-   Shows that users of general-purpose chatbots can form relationship-like bonds and actively attempt to preserve them across platform changes or model updates.
+-   Documents attachment behaviors (e.g., concern about losing "the" version of the AI) that mirror relational investment rather than purely instrumental use.
+
+Use in synthesis:
+-   Clinically relevant for understanding why some users may resist reducing AI-chatbot use: the attachment is not only to the function but to a perceived relationship. Intervention framing should acknowledge this relational dimension rather than treating it as irrational. Cross-reference with LLM-D12 Relationship Dependency subscale (Yankouskaya et al. 2025, EpiScope KB).
+
+### Nakagomi et al. 2026
+Nakagomi A, et al. AI companions and subjective well-being. *[Journal TBC]*. 2026.
+
+Summary:
+-   AI companion use was associated with higher well-being, particularly among lonelier users and those with moderate friend-network size.
+-   The benefit was context-specific: it was most pronounced where social alternatives were limited.
+
+Use in synthesis:
+-   Intervention-relevant because it suggests AI-companion use may serve a compensatory social function for isolated individuals. Blanket restriction approaches may therefore be inappropriate for this subgroup; targeted harm-reduction framing (supporting real-world socialization in parallel) is more clinically defensible. This also means prevention programs should consider the user's social baseline before recommending reduced AI use.
+
+### Catalan et al. 2026 (occupational context)
+Catalan [first author], et al. I'm Not Reading All of That. *[Journal/Conference TBC]*. 2026.
+
+Summary:
+-   Found that agentic coding-assistant systems provide weak scaffolding for reflection, verification, and meaning-making.
+-   Reduced cognitive engagement over time may translate to skill atrophy in occupational settings.
+
+Use in synthesis:
+-   Relevant to workplace or educational intervention design: AI-tool onboarding programs may need to explicitly build in reflection prompts, verification checkpoints, and autonomy-preserving practices to counteract the cognitive disengagement pattern. This is not a PIU intervention target per se, but it informs responsible AI-use promotion at the organizational level.

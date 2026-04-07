@@ -16,9 +16,11 @@ from automation.builder.models import SwarmSpec, ToolSpec
 from automation.builder.templates import (
     ARCHETYPE_SPECS,
     AVAILABLE_ARCHETYPES,
+    AVAILABLE_BLUEPRINTS,
     BUILTIN_TOOL_REGISTRY,
     build_persona_from_archetype,
     build_starter_swarm_spec,
+    build_swarm_spec_from_blueprint,
 )
 
 console = Console()
@@ -135,6 +137,7 @@ def build_swarm_spec_interactively(
     domain: str | None = None,
     swarm_name: str | None = None,
     description: str | None = None,
+    blueprint: str | None = None,
 ) -> SwarmSpec:
     domain_value = domain or _q_text("Target domain", default="General Research")
     swarm_name_value = swarm_name or _q_text("Swarm name", default=f"{domain_value} Swarm")
@@ -157,7 +160,13 @@ def build_swarm_spec_interactively(
 
     use_starter = _q_confirm("Use the recommended starter team?", default=True)
     if use_starter:
-        spec = build_starter_swarm_spec(
+        selected_blueprint = blueprint or _q_select(
+            "Starter blueprint",
+            AVAILABLE_BLUEPRINTS,
+            default="research-core",
+        )
+        spec = build_swarm_spec_from_blueprint(
+            blueprint=selected_blueprint,
             domain=domain_value,
             swarm_name=swarm_name_value,
             swarm_description=description_value,

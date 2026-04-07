@@ -166,16 +166,22 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
       metadata updates so the remaining top-level config sections are editable without raw YAML
 - [x] Add custom tool-registry editing flows so users can add, remove, or override non-built-in
       tools from the CLI instead of only curating the built-in registry subset
-- [ ] Replace the older `scaffold` path fully with the richer builder workflow and align all
-      docs and onboarding around `swarm init`
+- [x] Replace the older `scaffold` path with the richer builder workflow and align the
+      CLI creation path around `swarm init` (kept as a deprecated alias for compatibility)
 - [ ] Add persona templates for common roles: orchestrator, literature scout, critic,
       methodology reviewer, scribe, and domain specialist
-- [ ] Add `swarm doctor` validation: missing persona files, unknown tools, invalid routing,
+- [x] Add `swarm doctor` validation: missing persona files, unknown tools, invalid routing,
       duplicate roles, empty KB paths, and reviewer rule inconsistencies
 - [ ] Add `swarm preview` before file write so users can inspect team topology, tool scopes,
       and a config diff before confirming changes
 - [ ] Support both interactive mode and non-interactive flags so teams can be created from CI,
       scripts, or future UI layers using the same backend module
+- [x] Add named starter blueprints so users can begin from higher-level team presets instead of
+      only one default research-core layout
+- [x] Add blueprint export/import so custom teams can be saved as portable YAML files and reused
+      across repositories without hand-copying config and persona folders
+- [ ] Add richer blueprint packs and reusable policy presets for common workflows such as
+      evidence mapping, intervention assessment, and rapid briefing
 
 ---
 

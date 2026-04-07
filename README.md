@@ -57,7 +57,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 ## Create Your Own Swarm
 
-The repository now includes the first six phases of an interactive swarm builder.
+The repository now includes the first eight phases of an interactive swarm builder.
 
 Use the builder-backed command:
 
@@ -65,11 +65,19 @@ Use the builder-backed command:
 python -m automation.main init
 ```
 
+Use the reusable blueprint command group when you want to save a team and recreate it in another repository:
+
+```bash
+python -m automation.main blueprint --help
+```
+
 Current capabilities:
 
 - create a valid `swarm_config.yml` from a typed builder spec
 - generate persona markdown files and `agents/*/KB/` folders
-- start from a recommended starter team or define specialist personas interactively with richer prompts
+- start from named blueprints such as `research-core`, `literature-mapping`, `intervention-lab`, and `rapid-brief`
+- list available blueprints with `python -m automation.main blueprints`
+- define specialist personas interactively with richer prompts when you do not want a preset blueprint
 - preview file-level diffs before writes occur
 - inspect the active swarm with `python -m automation.main preview`
 - validate the active swarm with `python -m automation.main doctor`
@@ -84,12 +92,47 @@ Current capabilities:
 - edit a tool with `python -m automation.main tools edit`
 - remove a tool with `python -m automation.main tools remove`
 - auto-repair safe filesystem issues with `python -m automation.main doctor --fix`
+- run the legacy `python -m automation.main scaffold "Domain"` command as a deprecated alias to builder-backed init
+- export the current swarm as a reusable blueprint with `python -m automation.main blueprint export`
+- import a reusable blueprint into another repo with `python -m automation.main blueprint import ./blueprints/MyTeam.swarm-blueprint.yml`
 
 For a non-interactive starter swarm:
 
 ```bash
 python -m automation.main init --no-interactive --domain "Climate Science" --name "Climate Science Swarm"
 ```
+
+For a non-interactive blueprint-based swarm:
+
+```bash
+python -m automation.main init --no-interactive --template literature-mapping --domain "Behavioral Addiction" --name "Behavioral Addiction Map"
+```
+
+### Reusable Blueprints
+
+The export/import flow is for custom teams you want to carry across repos without manually copying `swarm_config.yml` and each `agents/*/persona.md` file.
+
+1. Export the current swarm into a portable blueprint file.
+2. Commit or share that blueprint file.
+3. Import it inside another repo and optionally override the new swarm name, description, or domain.
+
+Default behavior:
+
+- `swarm blueprint export` writes a YAML blueprint under `./blueprints/`
+- `swarm blueprint import` reads that file and regenerates `swarm_config.yml` plus the persona files in the target repo
+- imported blueprints reuse the exact tool registry, team structure, and reviewer/HITL settings captured in the exported typed spec
+
+Example:
+
+```bash
+python -m automation.main blueprint export --name "Behavioral Addiction Team"
+python -m automation.main blueprint import ./blueprints/BehavioralAddictionTeam.swarm-blueprint.yml --domain "Sleep Research" --name "Sleep Research Team"
+```
+
+Useful options:
+
+- `python -m automation.main blueprint export --output ./blueprints/custom-team.swarm-blueprint.yml --overwrite`
+- `python -m automation.main blueprint import ./blueprints/custom-team.swarm-blueprint.yml --description "Focused evidence-mapping swarm" --yes`
 
 ## Persona Squad
 
@@ -138,9 +181,9 @@ Useful working files:
 - Drafts/: Prompt packs, workflow templates, and generated outputs
 - Knowledge_Traceability_Matrix.md: Running audit trail for evidence use
 
-## Next Step
+## Builder Roadmap
 
-The next major module should be an interactive swarm builder so users can create their own personas, choose tools, set reviewer rules, and define orchestration behavior without hand-editing YAML.
+The interactive swarm builder is now the main configuration surface. The remaining work is product polish: richer blueprint packs, reusable policy presets, and higher-level template bundles on top of the existing typed builder core.
 
 Implemented in Phase 1:
 
@@ -179,13 +222,25 @@ Implemented in Phase 6:
 - `swarm tools edit` for updating existing tool registry entries
 - `swarm tools remove` for removing tool registry entries while protecting personas from ending up tool-less
 
+Implemented in Phase 7:
+
+- named swarm blueprints with `swarm blueprints` and `swarm init --template ...`
+- the older `swarm scaffold` flow now routes through the same builder-backed generation path as `swarm init`
+- stronger `swarm doctor` semantic validation for duplicate roles, routing limits, empty KB directories, journalist/orchestrator capability mismatches, and reviewer-rule consistency
+
+Implemented in Phase 8:
+
+- `swarm blueprint export` for saving the current typed swarm spec as a portable YAML blueprint file
+- `swarm blueprint import` for generating a swarm from that blueprint in another repo, with optional name, description, and domain overrides
+- blueprint files written under `./blueprints/` by default so custom teams can be versioned and shared directly
+
 Recommended next implementation direction:
 
 - Keep `Typer` as the command surface because the repo already uses it successfully.
 - Add `Rich` for previews, validation panels, and diff-style summaries.
 - Keep `Questionary` and extend the wizard into persona editing flows.
 - Keep the builder engine separate from the CLI so the same core can later power a richer TUI or web UI.
-- Add template management, richer policy presets, and optional higher-level swarm blueprints on top of the existing targeted edit commands.
+- Add richer blueprint packs, policy presets, and shared template bundles on top of the existing targeted edit commands.
 
 Planned command family:
 
@@ -200,8 +255,11 @@ Planned command family:
 - `swarm tools add`: add a built-in or custom tool registry entry
 - `swarm tools edit`: update a tool registry entry
 - `swarm tools remove`: remove a tool registry entry safely
+- `swarm blueprints`: list the available starter blueprints
+- `swarm blueprint export`: save the current swarm as a portable reusable blueprint
+- `swarm blueprint import`: generate a swarm from a portable blueprint file
 - `swarm preview`: render the current team, tool map, and config summary
-- `swarm doctor`: validate the generated config, persona files, KB layout, and tool wiring
+- `swarm doctor`: validate the generated config, persona files, KB layout, tool wiring, routing assumptions, and reviewer semantics
 - `swarm doctor --fix`: repair the safe filesystem issues automatically
 
 Design principle:

@@ -13,6 +13,176 @@ from automation.config import load_config
 
 console = Console()
 
+DISCOVERY_TOOLS = {
+    "search_literature",
+    "search_preprints",
+    "search_web",
+    "trace_literature_network",
+    "search_kb",
+    "scrape_page",
+    "lookup_doi",
+    "you_research",
+}
+
+WRITING_TOOLS = {
+    "write_section",
+}
+
+
+def _normalize_role(value: str) -> str:
+    return " ".join(value.lower().split())
+
+
+def _has_any_tool(persona: dict, tool_names: set[str]) -> bool:
+    return any(tool in tool_names for tool in persona.get("tools", []))
+
+
+def _check_role_collisions(report: SwarmDoctorReport, personas: list[dict]) -> None:
+    role_map: dict[str, list[str]] = {}
+    for persona in personas:
+        role = _normalize_role(persona.get("role", ""))
+        if not role:
+            continue
+        role_map.setdefault(role, []).append(persona.get("name", ""))
+
+    for role, names in role_map.items():
+        unique_names = [name for name in names if name]
+        if len(unique_names) > 1:
+            report.issues.append(
+                ValidationIssue(
+                    "warning",
+                    f"duplicate persona role '{role}' assigned to: {', '.join(unique_names)}",
+                    "swarm_config.yml",
+                )
+            )
+
+
+def _check_routing_semantics(
+    report: SwarmDoctorReport,
+    personas: list[dict],
+    orchestrator_name: str,
+    journalist_name: str,
+    max_agent_calls: int,
+    max_tool_rounds: int,
+) -> None:
+    persona_map = {persona.get("name", ""): persona for persona in personas}
+    specialists = [
+        persona for persona in personas
+        if persona.get("name") not in {orchestrator_name, journalist_name}
+    ]
+
+    if orchestrator_name == journalist_name and orchestrator_name:
+        report.issues.append(
+            ValidationIssue(
+                "error",
+                "orchestrator and journalist cannot be the same persona",
+                "swarm_config.yml",
+            )
+        )
+
+    if max_agent_calls < 1:
+        report.issues.append(
+            ValidationIssue("error", "max_agent_calls must be at least 1", "swarm_config.yml")
+        )
+    elif specialists and max_agent_calls < len(specialists):
+        report.issues.append(
+            ValidationIssue(
+                "warning",
+                f"max_agent_calls ({max_agent_calls}) is lower than specialist count ({len(specialists)}); some specialists may never be routed in one run",
+                "swarm_config.yml",
+            )
+        )
+
+    if max_tool_rounds < 1:
+        report.issues.append(
+            ValidationIssue("error", "max_tool_rounds_per_agent must be at least 1", "swarm_config.yml")
+        )
+
+    orchestrator = persona_map.get(orchestrator_name)
+    journalist = persona_map.get(journalist_name)
+
+    if orchestrator and not _has_any_tool(orchestrator, DISCOVERY_TOOLS):
+        report.issues.append(
+            ValidationIssue(
+                "warning",
+                f"orchestrator '{orchestrator_name}' has no discovery-oriented tools; routing may rely on weak context gathering",
+                "swarm_config.yml",
+            )
+        )
+
+    if journalist and not _has_any_tool(journalist, WRITING_TOOLS):
+        report.issues.append(
+            ValidationIssue(
+                "warning",
+                f"journalist '{journalist_name}' has no writing tool; final synthesis may fail to persist outputs",
+                "swarm_config.yml",
+            )
+        )
+
+    for persona in specialists:
+        if not _has_any_tool(persona, DISCOVERY_TOOLS):
+            report.issues.append(
+                ValidationIssue(
+                    "warning",
+                    f"specialist '{persona.get('name', '')}' has no discovery-oriented tools",
+                    "swarm_config.yml",
+                )
+            )
+
+
+def _check_reviewer_semantics(report: SwarmDoctorReport, reviewer: dict) -> None:
+    reviewer_enabled = reviewer.get("enabled", True)
+    max_revision_loops = reviewer.get("max_revision_loops", 3)
+    required_elements = reviewer.get("required_elements", []) or []
+    rejection_patterns = reviewer.get("rejection_patterns", []) or []
+    banned_words = reviewer.get("banned_words", []) or []
+    reviewer_model = reviewer.get("model", {}) or {}
+
+    if reviewer_enabled and max_revision_loops < 1:
+        report.issues.append(
+            ValidationIssue(
+                "error",
+                "reviewer is enabled but max_revision_loops is less than 1",
+                "swarm_config.yml",
+            )
+        )
+
+    if reviewer_enabled and not required_elements:
+        report.issues.append(
+            ValidationIssue(
+                "error",
+                "reviewer is enabled but required_elements is empty",
+                "swarm_config.yml",
+            )
+        )
+
+    if reviewer_enabled and not rejection_patterns:
+        report.issues.append(
+            ValidationIssue(
+                "warning",
+                "reviewer is enabled but rejection_patterns is empty; adversarial checks may be too weak",
+                "swarm_config.yml",
+            )
+        )
+
+    if not reviewer_enabled and (required_elements or rejection_patterns or banned_words):
+        report.issues.append(
+            ValidationIssue(
+                "warning",
+                "reviewer is disabled but reviewer rules are still configured; they will not run until reviewer is re-enabled",
+                "swarm_config.yml",
+            )
+        )
+
+    if reviewer_model.get("temperature") is not None and not reviewer_model.get("name"):
+        report.issues.append(
+            ValidationIssue(
+                "warning",
+                "reviewer model temperature is set without a reviewer model name; the override may be ignored by readers of the config",
+                "swarm_config.yml",
+            )
+        )
+
 
 @dataclass
 class ValidationIssue:
@@ -54,14 +224,27 @@ def inspect_swarm(root_dir: Path) -> SwarmDoctorReport:
 
     personas = config.get("personas", [])
     tools = config.get("tools", {})
+    reviewer = config.get("reviewer", {})
+    orchestrator_block = config.get("orchestrator", {})
     persona_names = {persona.get("name", "") for persona in personas}
 
-    orchestrator = config.get("orchestrator", {}).get("agent")
-    journalist = config.get("orchestrator", {}).get("journalist")
+    orchestrator = orchestrator_block.get("agent")
+    journalist = orchestrator_block.get("journalist")
     if orchestrator not in persona_names:
         report.issues.append(ValidationIssue("error", "orchestrator agent is not defined in personas", "swarm_config.yml"))
     if journalist not in persona_names:
         report.issues.append(ValidationIssue("error", "journalist agent is not defined in personas", "swarm_config.yml"))
+
+    _check_role_collisions(report, personas)
+    _check_routing_semantics(
+        report,
+        personas,
+        orchestrator_name=orchestrator,
+        journalist_name=journalist,
+        max_agent_calls=orchestrator_block.get("max_agent_calls", 0),
+        max_tool_rounds=orchestrator_block.get("max_tool_rounds_per_agent", 0),
+    )
+    _check_reviewer_semantics(report, reviewer)
 
     seen_names = set()
     seen_paths = set()
@@ -86,6 +269,8 @@ def inspect_swarm(root_dir: Path) -> SwarmDoctorReport:
         kb_dir = persona_path.parent / "KB"
         if not kb_dir.exists():
             report.issues.append(ValidationIssue("warning", f"KB directory missing for '{persona_name}'", str(kb_dir)))
+        elif not any(child.name != ".gitkeep" for child in kb_dir.iterdir()):
+            report.issues.append(ValidationIssue("warning", f"KB directory is empty for '{persona_name}'", str(kb_dir)))
 
         persona_tools = persona.get("tools", [])
         if not persona_tools:

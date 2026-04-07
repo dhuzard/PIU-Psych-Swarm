@@ -2,6 +2,31 @@ from __future__ import annotations
 
 from automation.builder.models import PersonaSpec, SwarmSpec, ToolSpec, slugify_name
 
+
+def _default_reviewer_banned_words() -> list[str]:
+    return [
+        "groundbreaking",
+        "revolutionary",
+        "game-changing",
+        "paradigm-shifting",
+        "unprecedented",
+    ]
+
+
+def _default_reviewer_required_elements() -> list[str]:
+    return [
+        "clear task framing",
+        "a short limitations or uncertainty section",
+        "source-aware in-text citations when claims rely on external evidence",
+        "a final References or Sources section",
+    ]
+
+
+def _default_reviewer_rejection_patterns() -> list[str]:
+    return [
+        "any unsupported factual claim presented with certainty",
+    ]
+
 BUILTIN_TOOL_REGISTRY = {
     "search_literature": ToolSpec(
         module="automation.tools",
@@ -228,6 +253,86 @@ ARCHETYPE_SPECS = {
 AVAILABLE_ARCHETYPES = sorted(ARCHETYPE_SPECS.keys())
 
 
+BLUEPRINT_SPECS = {
+    "research-core": {
+        "description": "Balanced default research team for broad literature-backed synthesis.",
+        "personas": [
+            ("orchestrator", "Coordinator"),
+            ("literature-scout", "LiteratureScout"),
+            ("domain-specialist", "DomainSpecialist"),
+            ("methods-reviewer", "MethodsReviewer"),
+            ("journalist", "Journalist"),
+        ],
+        "orchestrator": "Coordinator",
+        "journalist": "Journalist",
+        "max_agent_calls": 8,
+        "max_tool_rounds_per_agent": 5,
+        "reviewer_enabled": True,
+        "hitl_enabled": False,
+    },
+    "literature-mapping": {
+        "description": "Citation-chaining heavy team for landmark papers, author trails, and evidence maps.",
+        "personas": [
+            ("orchestrator", "Coordinator"),
+            ("literature-scout", "LitScoutLead"),
+            ("domain-specialist", "TheoryMapper"),
+            ("methods-reviewer", "EvidenceAuditor"),
+            ("journalist", "Journalist"),
+        ],
+        "orchestrator": "Coordinator",
+        "journalist": "Journalist",
+        "max_agent_calls": 10,
+        "max_tool_rounds_per_agent": 6,
+        "reviewer_enabled": True,
+        "hitl_enabled": False,
+    },
+    "intervention-lab": {
+        "description": "Applied evidence team for treatment, prevention, and implementation questions.",
+        "personas": [
+            ("orchestrator", "Coordinator"),
+            ("literature-scout", "LiteratureScout"),
+            ("intervention-specialist", "InterventionLead"),
+            ("methods-reviewer", "MethodsReviewer"),
+            ("journalist", "Journalist"),
+        ],
+        "orchestrator": "Coordinator",
+        "journalist": "Journalist",
+        "max_agent_calls": 8,
+        "max_tool_rounds_per_agent": 5,
+        "reviewer_enabled": True,
+        "hitl_enabled": False,
+    },
+    "rapid-brief": {
+        "description": "Lean briefing team for concise evidence briefs with fewer specialist hops.",
+        "personas": [
+            ("orchestrator", "Coordinator"),
+            ("domain-specialist", "SubjectLead"),
+            ("methods-reviewer", "QualityReviewer"),
+            ("journalist", "Journalist"),
+        ],
+        "orchestrator": "Coordinator",
+        "journalist": "Journalist",
+        "max_agent_calls": 5,
+        "max_tool_rounds_per_agent": 4,
+        "reviewer_enabled": True,
+        "hitl_enabled": False,
+    },
+}
+
+AVAILABLE_BLUEPRINTS = sorted(BLUEPRINT_SPECS.keys())
+
+
+def get_blueprint_names() -> list[str]:
+    return list(AVAILABLE_BLUEPRINTS)
+
+
+def get_blueprint_descriptions() -> dict[str, str]:
+    return {
+        name: spec["description"]
+        for name, spec in BLUEPRINT_SPECS.items()
+    }
+
+
 def build_persona_from_archetype(
     archetype: str,
     domain: str,
@@ -262,13 +367,35 @@ def build_starter_swarm_spec(
     model_name: str = "gpt-4o",
     model_env_key: str = "OPENAI_API_KEY",
 ) -> SwarmSpec:
+    return build_swarm_spec_from_blueprint(
+        blueprint="research-core",
+        domain=domain,
+        swarm_name=swarm_name,
+        swarm_description=swarm_description,
+        model_provider=model_provider,
+        model_name=model_name,
+        model_env_key=model_env_key,
+    )
+
+
+def build_swarm_spec_from_blueprint(
+    blueprint: str,
+    domain: str,
+    swarm_name: str,
+    swarm_description: str,
+    model_provider: str = "openai",
+    model_name: str = "gpt-4o",
+    model_env_key: str = "OPENAI_API_KEY",
+) -> SwarmSpec:
+    if blueprint not in BLUEPRINT_SPECS:
+        raise ValueError(f"unknown blueprint '{blueprint}'")
+
+    blueprint_spec = BLUEPRINT_SPECS[blueprint]
     personas = [
-        build_persona_from_archetype("orchestrator", domain, name="Coordinator"),
-        build_persona_from_archetype("literature-scout", domain, name="LiteratureScout"),
-        build_persona_from_archetype("domain-specialist", domain, name="DomainSpecialist"),
-        build_persona_from_archetype("methods-reviewer", domain, name="MethodsReviewer"),
-        build_persona_from_archetype("journalist", domain, name="Journalist"),
+        build_persona_from_archetype(archetype, domain, name=name)
+        for archetype, name in blueprint_spec["personas"]
     ]
+
     return SwarmSpec(
         swarm_name=swarm_name,
         swarm_description=swarm_description,
@@ -277,23 +404,14 @@ def build_starter_swarm_spec(
         model_name=model_name,
         model_env_key=model_env_key,
         personas=personas,
-        orchestrator_agent="Coordinator",
-        journalist_agent="Journalist",
-        reviewer_banned_words=[
-            "groundbreaking",
-            "revolutionary",
-            "game-changing",
-            "paradigm-shifting",
-            "unprecedented",
-        ],
-        reviewer_required_elements=[
-            "clear task framing",
-            "a short limitations or uncertainty section",
-            "source-aware in-text citations when claims rely on external evidence",
-            "a final References or Sources section",
-        ],
-        reviewer_rejection_patterns=[
-            "any unsupported factual claim presented with certainty",
-        ],
+        orchestrator_agent=blueprint_spec["orchestrator"],
+        journalist_agent=blueprint_spec["journalist"],
+        max_agent_calls=blueprint_spec["max_agent_calls"],
+        max_tool_rounds_per_agent=blueprint_spec["max_tool_rounds_per_agent"],
+        reviewer_enabled=blueprint_spec["reviewer_enabled"],
+        reviewer_banned_words=_default_reviewer_banned_words(),
+        reviewer_required_elements=_default_reviewer_required_elements(),
+        reviewer_rejection_patterns=_default_reviewer_rejection_patterns(),
+        hitl_enabled=blueprint_spec["hitl_enabled"],
         tool_registry=BUILTIN_TOOL_REGISTRY,
     )

@@ -5,7 +5,7 @@ Usage:
     python -m automation.main init
     python -m automation.main execute "Your research prompt here"
     python -m automation.main report "Your prompt" --mode narrative-review
-    python -m automation.main scaffold "Climate Science"
+    python -m automation.main blueprints
     python -m automation.main info
 
 All behavior is driven by swarm_config.yml. Edit that file to
@@ -36,11 +36,23 @@ from pathlib import Path
 import typer
 from dotenv import load_dotenv
 from rich.console import Console
+from rich.table import Table
 
+from automation.builder.blueprints import (
+    apply_blueprint_overrides,
+    default_blueprint_path,
+    export_swarm_blueprint,
+    load_swarm_blueprint,
+)
 from automation.builder.doctor import apply_safe_fixes, inspect_swarm, preview_existing_swarm, render_doctor_report
 from automation.builder.generator import generate_swarm_project, preview_generation_diff
 from automation.builder.loader import load_swarm_spec_from_disk
-from automation.builder.templates import build_starter_swarm_spec
+from automation.builder.templates import (
+    build_starter_swarm_spec,
+    build_swarm_spec_from_blueprint,
+    get_blueprint_descriptions,
+    get_blueprint_names,
+)
 from automation.builder.wizard import (
     build_persona_interactively,
     build_swarm_spec_interactively,
@@ -71,12 +83,14 @@ app = typer.Typer(
     help="Research Swarm CLI — A configurable multi-agent research system built on LangGraph.",
     add_completion=False,
 )
+blueprint_app = typer.Typer(help="Export or import portable blueprint files for reuse across repos.")
 persona_app = typer.Typer(help="Add or edit personas in the current swarm.")
 team_app = typer.Typer(help="Configure orchestrator, routing, and HITL settings.")
 review_app = typer.Typer(help="Configure reviewer policy and adversarial checks.")
 model_app = typer.Typer(help="Configure model provider, model name, and env key.")
 metadata_app = typer.Typer(help="Configure swarm metadata, output paths, and epistemic tags.")
 tools_app = typer.Typer(help="Curate the active tool registry for the current swarm.")
+app.add_typer(blueprint_app, name="blueprint")
 app.add_typer(persona_app, name="persona")
 app.add_typer(team_app, name="team")
 app.add_typer(review_app, name="review")
@@ -326,6 +340,70 @@ def _run_graph(config: dict, prompt: str) -> None:
     _write_run_metrics(config, prompt, final_token_usage)
 
 
+def _supported_blueprints_text() -> str:
+    return ", ".join(get_blueprint_names())
+
+
+def _build_init_spec(
+    domain: str,
+    name: str,
+    description: str,
+    template: str,
+    interactive: bool,
+):
+    if template not in get_blueprint_names():
+        raise ValueError(
+            f"Unknown template '{template}'. Supported templates: {_supported_blueprints_text()}"
+        )
+
+    if interactive:
+        return build_swarm_spec_interactively(
+            domain=domain or None,
+            swarm_name=name or None,
+            description=description or None,
+            blueprint=template,
+        )
+
+    domain_value = domain or "General Research"
+    return build_swarm_spec_from_blueprint(
+        blueprint=template,
+        domain=domain_value,
+        swarm_name=name or f"{domain_value} Swarm",
+        swarm_description=description or f"Autonomous multi-agent research swarm for {domain_value}",
+        model_provider="openai",
+        model_name="gpt-4o",
+        model_env_key="OPENAI_API_KEY",
+    )
+
+
+def _write_swarm_from_spec(spec, root_dir: Path, force: bool, yes: bool, confirm_text: str) -> None:
+    preview_generation_diff(spec, root_dir)
+
+    if not yes and not typer.confirm(confirm_text, default=True):
+        typer.secho("Init aborted before writing files.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    try:
+        result = generate_swarm_project(spec, root_dir=root_dir, force=force)
+        load_config(result.config_path)
+    except Exception as e:
+        typer.secho(f"INIT ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho("\nSwarm files generated successfully.", fg=typer.colors.GREEN)
+    for path in result.written_files:
+        typer.secho(f"  • {path.relative_to(root_dir)}", fg=typer.colors.CYAN)
+
+    typer.secho(
+        "\nNext steps:\n"
+        "  1. Review swarm_config.yml and the generated persona files\n"
+        "  2. Add any reference files to agents/*/KB/\n"
+        "  3. Run: python -m automation.ingest\n"
+        "  4. Run: python -m automation.main info",
+        fg=typer.colors.CYAN,
+    )
+
+
 # ── CLI commands ──────────────────────────────────────────────────────────
 
 @app.command()
@@ -335,7 +413,7 @@ def init(
     description: str = typer.Option("", help="Short swarm description."),
     template: str = typer.Option(
         "research-core",
-        help="Starter team template. Current options: research-core.",
+        help="Starter team template. Run 'python -m automation.main blueprints' to view options.",
     ),
     interactive: bool = typer.Option(
         True,
@@ -371,53 +449,118 @@ def init(
         )
         raise typer.Exit(code=1)
 
-    if template != "research-core":
+    try:
+        spec = _build_init_spec(
+            domain=domain,
+            name=name,
+            description=description,
+            template=template,
+            interactive=interactive,
+        )
+    except ValueError as e:
+        typer.secho(str(e), fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    if not interactive:
+        preview_swarm_spec(spec)
+
+    _write_swarm_from_spec(spec, root_dir, force=force, yes=yes, confirm_text="Write these files to the current repo?")
+
+
+@app.command()
+def blueprints():
+    """
+    List the available starter blueprints for the builder-backed init flow.
+    """
+    descriptions = get_blueprint_descriptions()
+    table = Table(title="Swarm Blueprints")
+    table.add_column("Name")
+    table.add_column("Description")
+    for name in get_blueprint_names():
+        table.add_row(name, descriptions.get(name, ""))
+    console.print(table)
+
+
+@blueprint_app.command("export")
+def blueprint_export(
+    output: str = typer.Option("", help="Blueprint file path. Defaults to ./blueprints/<name>.swarm-blueprint.yml"),
+    name: str = typer.Option("", help="Blueprint display name. Defaults to the current swarm name."),
+    description: str = typer.Option("", help="Blueprint description. Defaults to the current swarm description."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite an existing blueprint file."),
+):
+    """
+    Export the current swarm as a portable blueprint YAML file.
+    """
+    root_dir = Path.cwd()
+    try:
+        spec = load_swarm_spec_from_disk(root_dir)
+    except Exception as e:
+        typer.secho(f"BLUEPRINT EXPORT ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    blueprint_name = name or spec.swarm_name
+    output_path = Path(output).expanduser() if output else default_blueprint_path(root_dir, blueprint_name)
+    if output_path.exists() and not overwrite:
         typer.secho(
-            f"Unknown template '{template}'. Supported templates: research-core",
+            f"Blueprint file already exists: {output_path}. Use --overwrite to replace it.",
             fg=typer.colors.RED,
         )
         raise typer.Exit(code=1)
 
-    if interactive:
-        spec = build_swarm_spec_interactively(
-            domain=domain or None,
-            swarm_name=name or None,
-            description=description or None,
-        )
-    else:
-        domain_value = domain or "General Research"
-        spec = build_starter_swarm_spec(
-            domain=domain_value,
-            swarm_name=name or f"{domain_value} Swarm",
-            swarm_description=description or f"Autonomous multi-agent research swarm for {domain_value}",
-        )
-        preview_swarm_spec(spec)
-
-    preview_generation_diff(spec, root_dir)
-
-    if not yes and not typer.confirm("Write these files to the current repo?", default=True):
-        typer.secho("Init aborted before writing files.", fg=typer.colors.YELLOW)
-        raise typer.Exit(code=0)
-
     try:
-        result = generate_swarm_project(spec, root_dir=root_dir, force=force)
-        load_config(result.config_path)
+        written_path = export_swarm_blueprint(
+            spec,
+            output_path=output_path,
+            blueprint_name=blueprint_name,
+            blueprint_description=description or spec.swarm_description,
+        )
     except Exception as e:
-        typer.secho(f"INIT ERROR: {e}", fg=typer.colors.RED)
+        typer.secho(f"BLUEPRINT EXPORT ERROR: {e}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    typer.secho("\nSwarm files generated successfully.", fg=typer.colors.GREEN)
-    for path in result.written_files:
-        typer.secho(f"  • {path.relative_to(root_dir)}", fg=typer.colors.CYAN)
+    typer.secho(f"Exported blueprint to {written_path}", fg=typer.colors.GREEN)
+
+
+@blueprint_app.command("import")
+def blueprint_import(
+    file: str = typer.Argument(..., help="Path to a .swarm-blueprint.yml file."),
+    name: str = typer.Option("", help="Override swarm name when importing."),
+    description: str = typer.Option("", help="Override swarm description when importing."),
+    domain: str = typer.Option("", help="Override domain label when importing."),
+    force: bool = typer.Option(False, "--force", help="Overwrite generated files if they already exist."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the final confirmation prompt."),
+):
+    """
+    Import a portable blueprint file and generate a swarm in the current repo.
+    """
+    root_dir = Path.cwd()
+    config_path = root_dir / "swarm_config.yml"
+    if config_path.exists() and not force:
+        typer.secho(
+            "swarm_config.yml already exists in the current directory. Use --force to overwrite generated files.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(code=1)
+
+    blueprint_path = Path(file).expanduser()
+    try:
+        blueprint_meta, spec = load_swarm_blueprint(blueprint_path)
+        spec = apply_blueprint_overrides(
+            spec,
+            swarm_name=name or None,
+            swarm_description=description or None,
+            domain=domain or None,
+        )
+    except Exception as e:
+        typer.secho(f"BLUEPRINT IMPORT ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
 
     typer.secho(
-        "\nNext steps:\n"
-        "  1. Review swarm_config.yml and the generated persona files\n"
-        "  2. Add any reference files to agents/*/KB/\n"
-        "  3. Run: python -m automation.ingest\n"
-        "  4. Run: python -m automation.main info",
+        f"Importing blueprint: {blueprint_meta.get('name', blueprint_path.name)}",
         fg=typer.colors.CYAN,
     )
+    preview_swarm_spec(spec)
+    _write_swarm_from_spec(spec, root_dir, force=force, yes=yes, confirm_text="Write these files to the current repo?")
 
 
 @app.command()
@@ -961,73 +1104,36 @@ def report(
 @app.command()
 def scaffold(domain: str):
     """
-    Scaffold a new domain-specific swarm configuration.
-
-    Creates default persona directories and a starter swarm_config.yml
-    so you can quickly customize the swarm for a new field.
-
-    Prefer `python -m automation.main init` for the newer builder-backed flow.
+    Deprecated alias for `swarm init --no-interactive`.
 
     Example:
         python -m automation.main scaffold "Climate Science"
     """
-    agents_dir = Path("agents")
-    default_personas = {
-        "Orchestrator": "Coordinates the swarm, synthesizes inputs, resolves conflicts, and dictates research direction.",
-        "Researcher": "Deep domain expert who searches literature and external sources for evidence.",
-        "Critic": "Quality assurance and adversarial review. Challenges assumptions and verifies citations.",
-        "Scribe": "Neutral observer and documentarian. Writes all outputs to disk with professional formatting.",
-    }
-
-    typer.secho(f"\n🏗️  Scaffolding new swarm for: '{domain}'", fg=typer.colors.CYAN)
-
-    for persona_name, description in default_personas.items():
-        persona_dir = agents_dir / persona_name
-        persona_dir.mkdir(parents=True, exist_ok=True)
-        (persona_dir / "KB").mkdir(exist_ok=True)
-
-        persona_file = persona_dir / "persona.md"
-        if not persona_file.exists():
-            persona_file.write_text(
-                f"# {persona_name}\n"
-                f"**Role**: {persona_name} for {domain}\n\n"
-                f"## Core Mission\n"
-                f"{description}\n\n"
-                f"## Domain Focus\n"
-                f"- (Define specific {domain} expertise areas here)\n\n"
-                f"## Knowledge Base (KB) Focus\n"
-                f"- (List key sources, standards, or frameworks for {domain})\n\n"
-                f"## Behavior\n"
-                f"- (Define behavioral rules and search triggers)\n",
-                encoding="utf-8",
-            )
-            typer.secho(f"  ✅ Created: {persona_file}", fg=typer.colors.GREEN)
-        else:
-            typer.secho(f"  ⏭️  Exists:  {persona_file}", fg=typer.colors.YELLOW)
-
-    config_file = Path("swarm_config.yml")
-    if config_file.exists():
+    root_dir = Path.cwd()
+    config_path = root_dir / "swarm_config.yml"
+    if config_path.exists():
         typer.secho(
-            f"\n⚠️  swarm_config.yml already exists. "
-            f"Please edit it manually to update personas for '{domain}'.",
+            "'swarm scaffold' is deprecated and now routes through the builder-backed init flow. "
+            "Use 'swarm init' for new work.",
             fg=typer.colors.YELLOW,
         )
-    else:
         typer.secho(
-            f"\n💡 No swarm_config.yml found. "
-            f"Copy the example from the repo and customize it.",
-            fg=typer.colors.YELLOW,
+            "swarm_config.yml already exists in the current directory. Use 'swarm preview' or the configure commands to evolve it.",
+            fg=typer.colors.RED,
         )
+        raise typer.Exit(code=1)
 
     typer.secho(
-        f"\n🎉 Scaffolding complete! Next steps:\n"
-        f"   1. Edit agents/*/persona.md files with {domain}-specific expertise\n"
-        f"   2. Edit swarm_config.yml to register your personas and tools\n"
-        f"   3. Drop reference documents into agents/*/KB/ folders\n"
-        f"   4. Run: python -m automation.ingest  (to vectorize KB documents)\n"
-        f"   5. Run: python -m automation.main execute \"Your first prompt\"",
-        fg=typer.colors.CYAN,
+        "'swarm scaffold' is deprecated; generating a non-interactive research-core swarm via the builder.",
+        fg=typer.colors.YELLOW,
     )
+    spec = build_starter_swarm_spec(
+        domain=domain,
+        swarm_name=f"{domain} Swarm",
+        swarm_description=f"Autonomous multi-agent research swarm for {domain}",
+    )
+    preview_swarm_spec(spec)
+    _write_swarm_from_spec(spec, root_dir, force=False, yes=True, confirm_text="")
 
 
 @app.command()

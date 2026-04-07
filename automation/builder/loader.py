@@ -39,25 +39,14 @@ def parse_persona_markdown(
     content = path.read_text(encoding="utf-8") if path.exists() else ""
     lines = content.splitlines()
 
-    title_line = lines[0].strip() if lines else f"# {fallback_name} {fallback_icon}"
-    title_body = title_line[2:].strip() if title_line.startswith("# ") else fallback_name
-    title_parts = title_body.rsplit(" ", 1)
-    if len(title_parts) == 2 and title_parts[1]:
-        parsed_name, parsed_icon = title_parts
-    else:
-        parsed_name, parsed_icon = fallback_name, fallback_icon
-
-    role_line = next((line for line in lines if line.startswith("**Role**:")), "")
-    parsed_role = role_line.replace("**Role**:", "", 1).strip().rstrip(".") or fallback_role
-
     core_mission_section = _extract_section(lines, "Core Mission")
     core_mission = " ".join(core_mission_section).strip() or f"Core mission for {fallback_name}."
 
     return PersonaSpec(
-        name=parsed_name or fallback_name,
+        name=fallback_name,
         folder_name=path.parent.name,
-        icon=parsed_icon or fallback_icon,
-        role=parsed_role,
+        icon=fallback_icon,
+        role=fallback_role,
         tools=tools,
         core_mission=core_mission,
         domain_focus=_extract_section(lines, "Domain Focus"),

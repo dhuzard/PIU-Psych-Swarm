@@ -2,6 +2,7 @@
 main.py — CLI Entry Point for the Research Swarm
 
 Usage:
+    python -m automation.main init
     python -m automation.main execute "Your research prompt here"
     python -m automation.main report "Your prompt" --mode narrative-review
     python -m automation.main scaffold "Climate Science"
@@ -34,7 +35,25 @@ from pathlib import Path
 
 import typer
 from dotenv import load_dotenv
+from rich.console import Console
 
+from automation.builder.doctor import apply_safe_fixes, inspect_swarm, preview_existing_swarm, render_doctor_report
+from automation.builder.generator import generate_swarm_project, preview_generation_diff
+from automation.builder.loader import load_swarm_spec_from_disk
+from automation.builder.templates import build_starter_swarm_spec
+from automation.builder.wizard import (
+    build_persona_interactively,
+    build_swarm_spec_interactively,
+    build_tool_spec_interactively,
+    configure_metadata_interactively,
+    configure_model_interactively,
+    configure_reviewer_interactively,
+    configure_team_interactively,
+    configure_tools_interactively,
+    preview_swarm_spec,
+    remove_tool_from_spec,
+    upsert_tool_in_spec,
+)
 from automation.config import (
     load_config,
     validate_env,
@@ -45,11 +64,25 @@ from automation.graph import build_graph, Command  # Command re-exported from gr
 # Load environment configuration (.env)
 load_dotenv()
 
+console = Console()
+
 app = typer.Typer(
     name="swarm",
     help="Research Swarm CLI — A configurable multi-agent research system built on LangGraph.",
     add_completion=False,
 )
+persona_app = typer.Typer(help="Add or edit personas in the current swarm.")
+team_app = typer.Typer(help="Configure orchestrator, routing, and HITL settings.")
+review_app = typer.Typer(help="Configure reviewer policy and adversarial checks.")
+model_app = typer.Typer(help="Configure model provider, model name, and env key.")
+metadata_app = typer.Typer(help="Configure swarm metadata, output paths, and epistemic tags.")
+tools_app = typer.Typer(help="Curate the active tool registry for the current swarm.")
+app.add_typer(persona_app, name="persona")
+app.add_typer(team_app, name="team")
+app.add_typer(review_app, name="review")
+app.add_typer(model_app, name="model")
+app.add_typer(metadata_app, name="metadata")
+app.add_typer(tools_app, name="tools")
 
 # ── Report-mode templates ─────────────────────────────────────────────────
 REPORT_MODES = {
@@ -296,6 +329,576 @@ def _run_graph(config: dict, prompt: str) -> None:
 # ── CLI commands ──────────────────────────────────────────────────────────
 
 @app.command()
+def init(
+    domain: str = typer.Option("", help="Target research domain for the swarm."),
+    name: str = typer.Option("", help="Swarm name to generate."),
+    description: str = typer.Option("", help="Short swarm description."),
+    template: str = typer.Option(
+        "research-core",
+        help="Starter team template. Current options: research-core.",
+    ),
+    interactive: bool = typer.Option(
+        True,
+        "--interactive/--no-interactive",
+        help="Use guided prompts instead of default starter values.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Overwrite generated files if they already exist.",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="Skip the final confirmation prompt.",
+    ),
+):
+    """
+    Create a new swarm configuration and persona files from a builder-backed spec.
+
+    This command uses the builder core plus the interactive wizard layer. It
+    generates a valid swarm_config.yml plus persona markdown files and KB
+    directories.
+    """
+    root_dir = Path.cwd()
+    config_path = root_dir / "swarm_config.yml"
+
+    if config_path.exists() and not force:
+        typer.secho(
+            "swarm_config.yml already exists in the current directory. "
+            "Use --force to overwrite generated files.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(code=1)
+
+    if template != "research-core":
+        typer.secho(
+            f"Unknown template '{template}'. Supported templates: research-core",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(code=1)
+
+    if interactive:
+        spec = build_swarm_spec_interactively(
+            domain=domain or None,
+            swarm_name=name or None,
+            description=description or None,
+        )
+    else:
+        domain_value = domain or "General Research"
+        spec = build_starter_swarm_spec(
+            domain=domain_value,
+            swarm_name=name or f"{domain_value} Swarm",
+            swarm_description=description or f"Autonomous multi-agent research swarm for {domain_value}",
+        )
+        preview_swarm_spec(spec)
+
+    preview_generation_diff(spec, root_dir)
+
+    if not yes and not typer.confirm("Write these files to the current repo?", default=True):
+        typer.secho("Init aborted before writing files.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    try:
+        result = generate_swarm_project(spec, root_dir=root_dir, force=force)
+        load_config(result.config_path)
+    except Exception as e:
+        typer.secho(f"INIT ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho("\nSwarm files generated successfully.", fg=typer.colors.GREEN)
+    for path in result.written_files:
+        typer.secho(f"  • {path.relative_to(root_dir)}", fg=typer.colors.CYAN)
+
+    typer.secho(
+        "\nNext steps:\n"
+        "  1. Review swarm_config.yml and the generated persona files\n"
+        "  2. Add any reference files to agents/*/KB/\n"
+        "  3. Run: python -m automation.ingest\n"
+        "  4. Run: python -m automation.main info",
+        fg=typer.colors.CYAN,
+    )
+
+
+@app.command()
+def preview():
+    """
+    Render a structured preview of the current swarm configuration.
+    """
+    root_dir = Path.cwd()
+    try:
+        preview_existing_swarm(root_dir)
+    except Exception as e:
+        typer.secho(f"PREVIEW ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def doctor(
+    fix: bool = typer.Option(
+        False,
+        "--fix",
+        help="Apply safe automatic fixes for missing KB directories and .gitkeep files.",
+    ),
+):
+    """
+    Validate the current swarm configuration, persona files, and tool wiring.
+    """
+    root_dir = Path.cwd()
+    if fix:
+        try:
+            created = apply_safe_fixes(root_dir)
+            if created:
+                typer.secho("Applied safe fixes:", fg=typer.colors.CYAN)
+                for path in created:
+                    typer.secho(f"  • {path.relative_to(root_dir)}", fg=typer.colors.CYAN)
+        except Exception as e:
+            typer.secho(f"DOCTOR FIX ERROR: {e}", fg=typer.colors.RED)
+            raise typer.Exit(code=1)
+    report = inspect_swarm(root_dir)
+    render_doctor_report(report)
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
+@persona_app.command("add")
+def persona_add(
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation after preview."),
+):
+    """
+    Add a new persona to the current swarm and preview the resulting file diffs.
+    """
+    root_dir = Path.cwd()
+    try:
+        spec = load_swarm_spec_from_disk(root_dir)
+    except Exception as e:
+        typer.secho(f"PERSONA ADD ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    new_persona = build_persona_interactively(spec.domain)
+    if any(persona.name == new_persona.name for persona in spec.personas):
+        typer.secho(f"Persona '{new_persona.name}' already exists.", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+    spec.personas.append(new_persona)
+
+    preview_swarm_spec(spec)
+    preview_generation_diff(spec, root_dir)
+    if not yes and not typer.confirm("Write these persona changes?", default=True):
+        typer.secho("Persona add aborted.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    try:
+        generate_swarm_project(spec, root_dir=root_dir, force=True)
+    except Exception as e:
+        typer.secho(f"PERSONA ADD ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho(f"Added persona '{new_persona.name}'.", fg=typer.colors.GREEN)
+
+
+@persona_app.command("edit")
+def persona_edit(
+    name: str = typer.Option("", "--name", help="Existing persona name to edit."),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation after preview."),
+):
+    """
+    Edit an existing persona in the current swarm and preview the file diffs.
+    """
+    root_dir = Path.cwd()
+    try:
+        spec = load_swarm_spec_from_disk(root_dir)
+    except Exception as e:
+        typer.secho(f"PERSONA EDIT ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    persona_names = [persona.name for persona in spec.personas]
+    target_name = name or typer.prompt("Persona to edit", default=persona_names[0])
+    matching = next((persona for persona in spec.personas if persona.name == target_name), None)
+    if matching is None:
+        typer.secho(f"Persona '{target_name}' not found.", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    updated = build_persona_interactively(spec.domain, existing_persona=matching)
+    old_name = matching.name
+    for index, persona in enumerate(spec.personas):
+        if persona.name == old_name:
+            spec.personas[index] = updated
+            break
+
+    if spec.orchestrator_agent == old_name:
+        spec.orchestrator_agent = updated.name
+    if spec.journalist_agent == old_name:
+        spec.journalist_agent = updated.name
+
+    preview_swarm_spec(spec)
+    preview_generation_diff(spec, root_dir)
+    if not yes and not typer.confirm("Write these persona edits?", default=True):
+        typer.secho("Persona edit aborted.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    try:
+        generate_swarm_project(spec, root_dir=root_dir, force=True)
+    except Exception as e:
+        typer.secho(f"PERSONA EDIT ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho(f"Updated persona '{updated.name}'.", fg=typer.colors.GREEN)
+
+
+@team_app.command("configure")
+def team_configure(
+    orchestrator: str = typer.Option("", help="Persona name to use as orchestrator."),
+    journalist: str = typer.Option("", help="Persona name to use as journalist/final writer."),
+    max_agent_calls: int = typer.Option(0, help="Maximum specialist dispatches; 0 keeps current value."),
+    max_tool_rounds: int = typer.Option(0, help="Maximum tool rounds per specialist; 0 keeps current value."),
+    hitl: str = typer.Option("", help="HITL mode: keep, enable, or disable."),
+    checkpoints: str = typer.Option("", help="Comma-separated HITL checkpoints."),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation after preview."),
+):
+    """
+    Configure orchestrator selection, routing limits, and HITL settings.
+    """
+    root_dir = Path.cwd()
+    try:
+        spec = load_swarm_spec_from_disk(root_dir)
+    except Exception as e:
+        typer.secho(f"TEAM CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    hitl_mode = hitl or None
+    checkpoint_list = [item.strip() for item in checkpoints.split(",") if item.strip()] or None
+    try:
+        updated = configure_team_interactively(
+            spec,
+            orchestrator_name=orchestrator or None,
+            journalist_name=journalist or None,
+            max_agent_calls=max_agent_calls or None,
+            max_tool_rounds=max_tool_rounds or None,
+            hitl_mode=hitl_mode,
+            hitl_checkpoints=checkpoint_list,
+        )
+    except Exception as e:
+        typer.secho(f"TEAM CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    preview_swarm_spec(updated)
+    preview_generation_diff(updated, root_dir)
+    if not yes and not typer.confirm("Write these team configuration changes?", default=True):
+        typer.secho("Team configure aborted.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    try:
+        generate_swarm_project(updated, root_dir=root_dir, force=True)
+    except Exception as e:
+        typer.secho(f"TEAM CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho("Updated team configuration.", fg=typer.colors.GREEN)
+
+
+@review_app.command("configure")
+def review_configure(
+    mode: str = typer.Option("", help="Reviewer mode: keep, enable, or disable."),
+    max_revision_loops: int = typer.Option(0, help="Reviewer max revision loops; 0 keeps current value."),
+    tone: str = typer.Option("", help="Reviewer tone override."),
+    banned_words: str = typer.Option("", help="Comma-separated banned words list."),
+    required_elements: str = typer.Option("", help="Comma-separated required elements list."),
+    rejection_patterns: str = typer.Option("", help="Comma-separated rejection patterns list."),
+    reviewer_model_name: str = typer.Option("", help="Reviewer model name; blank keeps current or inherited model."),
+    reviewer_model_temperature: float = typer.Option(-1.0, help="Reviewer model temperature; negative keeps current value."),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation after preview."),
+):
+    """
+    Configure reviewer policy, tone, bans, and adversarial model overrides.
+    """
+    root_dir = Path.cwd()
+    try:
+        spec = load_swarm_spec_from_disk(root_dir)
+    except Exception as e:
+        typer.secho(f"REVIEW CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    banned_list = [item.strip() for item in banned_words.split(",") if item.strip()] or None
+    required_list = [item.strip() for item in required_elements.split(",") if item.strip()] or None
+    rejection_list = [item.strip() for item in rejection_patterns.split(",") if item.strip()] or None
+    reviewer_temp = reviewer_model_temperature if reviewer_model_temperature >= 0 else None
+    reviewer_name_value = reviewer_model_name if reviewer_model_name else None
+
+    try:
+        updated = configure_reviewer_interactively(
+            spec,
+            reviewer_mode=mode or None,
+            max_revision_loops=max_revision_loops or None,
+            tone=tone or None,
+            banned_words=banned_list,
+            required_elements=required_list,
+            rejection_patterns=rejection_list,
+            reviewer_model_name=reviewer_name_value,
+            reviewer_model_temperature=reviewer_temp,
+        )
+    except Exception as e:
+        typer.secho(f"REVIEW CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    preview_swarm_spec(updated)
+    preview_generation_diff(updated, root_dir)
+    if not yes and not typer.confirm("Write these reviewer configuration changes?", default=True):
+        typer.secho("Review configure aborted.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    try:
+        generate_swarm_project(updated, root_dir=root_dir, force=True)
+    except Exception as e:
+        typer.secho(f"REVIEW CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho("Updated reviewer configuration.", fg=typer.colors.GREEN)
+
+
+@model_app.command("configure")
+def model_configure(
+    provider: str = typer.Option("", help="Model provider: openai, anthropic, or google."),
+    name: str = typer.Option("", help="Primary model name."),
+    temperature: float = typer.Option(-1.0, help="Primary model temperature; negative keeps current value."),
+    env_key: str = typer.Option("", help="Environment variable name for the model API key."),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation after preview."),
+):
+    """
+    Configure the primary model provider, model name, temperature, and env key.
+    """
+    root_dir = Path.cwd()
+    try:
+        spec = load_swarm_spec_from_disk(root_dir)
+        updated = configure_model_interactively(
+            spec,
+            provider=provider or None,
+            model_name=name or None,
+            temperature=temperature if temperature >= 0 else None,
+            env_key=env_key or None,
+        )
+    except Exception as e:
+        typer.secho(f"MODEL CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    preview_swarm_spec(updated)
+    preview_generation_diff(updated, root_dir)
+    if not yes and not typer.confirm("Write these model configuration changes?", default=True):
+        typer.secho("Model configure aborted.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    try:
+        generate_swarm_project(updated, root_dir=root_dir, force=True)
+    except Exception as e:
+        typer.secho(f"MODEL CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho("Updated model configuration.", fg=typer.colors.GREEN)
+
+
+@metadata_app.command("configure")
+def metadata_configure(
+    swarm_name: str = typer.Option("", help="Swarm display name."),
+    description: str = typer.Option("", help="Swarm description."),
+    domain: str = typer.Option("", help="Domain label used by the builder."),
+    output_dir: str = typer.Option("", help="Output directory path."),
+    traceability_matrix: str = typer.Option("", help="Traceability matrix path."),
+    epistemic_tags: str = typer.Option("", help="Comma-separated epistemic tags list."),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation after preview."),
+):
+    """
+    Configure swarm-level metadata, paths, and epistemic tags.
+    """
+    root_dir = Path.cwd()
+    try:
+        spec = load_swarm_spec_from_disk(root_dir)
+        updated = configure_metadata_interactively(
+            spec,
+            swarm_name=swarm_name or None,
+            swarm_description=description or None,
+            domain=domain or None,
+            output_dir=output_dir or None,
+            traceability_matrix=traceability_matrix or None,
+            epistemic_tags=[item.strip() for item in epistemic_tags.split(",") if item.strip()] or None,
+        )
+    except Exception as e:
+        typer.secho(f"METADATA CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    preview_swarm_spec(updated)
+    preview_generation_diff(updated, root_dir)
+    if not yes and not typer.confirm("Write these metadata changes?", default=True):
+        typer.secho("Metadata configure aborted.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    try:
+        generate_swarm_project(updated, root_dir=root_dir, force=True)
+    except Exception as e:
+        typer.secho(f"METADATA CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho("Updated swarm metadata.", fg=typer.colors.GREEN)
+
+
+@tools_app.command("configure")
+def tools_configure(
+    enabled_tools: str = typer.Option("", help="Comma-separated active tool registry keys."),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation after preview."),
+):
+    """
+    Curate the active tool registry and sync persona tool scopes to the selected set.
+    """
+    root_dir = Path.cwd()
+    try:
+        spec = load_swarm_spec_from_disk(root_dir)
+        enabled = [item.strip() for item in enabled_tools.split(",") if item.strip()] or None
+        updated = configure_tools_interactively(spec, enabled_tools=enabled)
+    except Exception as e:
+        typer.secho(f"TOOLS CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    preview_swarm_spec(updated)
+    preview_generation_diff(updated, root_dir)
+    if not yes and not typer.confirm("Write these tool registry changes?", default=True):
+        typer.secho("Tools configure aborted.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    try:
+        generate_swarm_project(updated, root_dir=root_dir, force=True)
+    except Exception as e:
+        typer.secho(f"TOOLS CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho("Updated tool registry configuration.", fg=typer.colors.GREEN)
+
+
+@tools_app.command("add")
+def tools_add(
+    key: str = typer.Option("", help="Tool registry key to add."),
+    builtin: str = typer.Option("", help="Built-in tool key to import into the active registry."),
+    module: str = typer.Option("", help="Python module path for a custom tool."),
+    function: str = typer.Option("", help="Function name for a custom tool."),
+    description: str = typer.Option("", help="Description for the tool."),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation after preview."),
+):
+    """
+    Add a built-in or custom tool to the active swarm registry.
+    """
+    root_dir = Path.cwd()
+    try:
+        spec = load_swarm_spec_from_disk(root_dir)
+        tool_key, tool_spec = build_tool_spec_interactively(
+            spec,
+            tool_key=key or None,
+            builtin_key=builtin or None,
+            module=module or None,
+            function=function or None,
+            description=description or None,
+        )
+        updated = upsert_tool_in_spec(spec, tool_key, tool_spec)
+    except Exception as e:
+        typer.secho(f"TOOLS ADD ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    preview_swarm_spec(updated)
+    preview_generation_diff(updated, root_dir)
+    if not yes and not typer.confirm("Write this tool addition?", default=True):
+        typer.secho("Tools add aborted.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    try:
+        generate_swarm_project(updated, root_dir=root_dir, force=True)
+    except Exception as e:
+        typer.secho(f"TOOLS ADD ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho(f"Added tool '{tool_key}'.", fg=typer.colors.GREEN)
+
+
+@tools_app.command("edit")
+def tools_edit(
+    key: str = typer.Option("", help="Existing tool registry key to edit."),
+    module: str = typer.Option("", help="Updated module path."),
+    function: str = typer.Option("", help="Updated function name."),
+    description: str = typer.Option("", help="Updated description."),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation after preview."),
+):
+    """
+    Edit an existing tool registry entry.
+    """
+    root_dir = Path.cwd()
+    try:
+        spec = load_swarm_spec_from_disk(root_dir)
+        tool_keys = list(spec.tool_registry.keys())
+        target_key = key or typer.prompt("Tool to edit", default=tool_keys[0])
+        existing_spec = spec.tool_registry.get(target_key)
+        if existing_spec is None:
+            raise ValueError(f"tool '{target_key}' not found in active registry")
+        new_key, tool_spec = build_tool_spec_interactively(
+            spec,
+            tool_key=target_key,
+            existing_spec=existing_spec,
+            module=module or None,
+            function=function or None,
+            description=description or None,
+        )
+        updated = spec.model_copy(deep=True)
+        if new_key != target_key:
+            del updated.tool_registry[target_key]
+            for persona in updated.personas:
+                persona.tools = [new_key if tool == target_key else tool for tool in persona.tools]
+        updated = upsert_tool_in_spec(updated, new_key, tool_spec)
+    except Exception as e:
+        typer.secho(f"TOOLS EDIT ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    preview_swarm_spec(updated)
+    preview_generation_diff(updated, root_dir)
+    if not yes and not typer.confirm("Write this tool edit?", default=True):
+        typer.secho("Tools edit aborted.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    try:
+        generate_swarm_project(updated, root_dir=root_dir, force=True)
+    except Exception as e:
+        typer.secho(f"TOOLS EDIT ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho(f"Updated tool '{new_key}'.", fg=typer.colors.GREEN)
+
+
+@tools_app.command("remove")
+def tools_remove(
+    key: str = typer.Option("", help="Existing tool registry key to remove."),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation after preview."),
+):
+    """
+    Remove a tool from the active registry if all personas retain at least one tool.
+    """
+    root_dir = Path.cwd()
+    try:
+        spec = load_swarm_spec_from_disk(root_dir)
+        tool_keys = list(spec.tool_registry.keys())
+        target_key = key or typer.prompt("Tool to remove", default=tool_keys[0])
+        updated = remove_tool_from_spec(spec, target_key)
+    except Exception as e:
+        typer.secho(f"TOOLS REMOVE ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    preview_swarm_spec(updated)
+    preview_generation_diff(updated, root_dir)
+    if not yes and not typer.confirm("Write this tool removal?", default=True):
+        typer.secho("Tools remove aborted.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    try:
+        generate_swarm_project(updated, root_dir=root_dir, force=True)
+    except Exception as e:
+        typer.secho(f"TOOLS REMOVE ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho(f"Removed tool '{target_key}'.", fg=typer.colors.GREEN)
+
+@app.command()
 def execute(prompt: str):
     """
     Execute an autonomous research task with the swarm.
@@ -362,6 +965,8 @@ def scaffold(domain: str):
 
     Creates default persona directories and a starter swarm_config.yml
     so you can quickly customize the swarm for a new field.
+
+    Prefer `python -m automation.main init` for the newer builder-backed flow.
 
     Example:
         python -m automation.main scaffold "Climate Science"

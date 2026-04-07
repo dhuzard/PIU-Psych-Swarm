@@ -146,6 +146,39 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
 
 ---
 
+## Interactive Swarm Builder
+
+- [x] Introduce a `SwarmBuilder` core module separate from the CLI so config generation,
+      preview, and file writes are testable without terminal interaction
+- [x] Add an initial `swarm init` command backed by the builder core; current version
+      supports starter-team generation, custom specialist creation, preview, and safe writes
+- [x] Add `swarm preview` and `swarm doctor` commands for inspection and validation of
+      on-disk swarms, including persona files, KB folders, tool imports, and env-key checks
+- [x] Keep `Typer` as the CLI entrypoint and add `Questionary` support with fallback to
+      plain prompts so the wizard is richer without depending entirely on one prompt library
+- [x] Add safe diff previews before builder writes and add `swarm persona add` /
+      `swarm persona edit` commands for modifying existing swarms without hand-editing YAML
+- [x] Add `swarm doctor --fix` for safe filesystem repairs such as missing KB directories
+      and `.gitkeep` placeholders
+- [x] Add `swarm team configure` and `swarm review configure` so non-persona edits no longer
+      require direct YAML changes
+- [x] Add targeted commands for model/provider changes, tool registry curation, and swarm-level
+      metadata updates so the remaining top-level config sections are editable without raw YAML
+- [x] Add custom tool-registry editing flows so users can add, remove, or override non-built-in
+      tools from the CLI instead of only curating the built-in registry subset
+- [ ] Replace the older `scaffold` path fully with the richer builder workflow and align all
+      docs and onboarding around `swarm init`
+- [ ] Add persona templates for common roles: orchestrator, literature scout, critic,
+      methodology reviewer, scribe, and domain specialist
+- [ ] Add `swarm doctor` validation: missing persona files, unknown tools, invalid routing,
+      duplicate roles, empty KB paths, and reviewer rule inconsistencies
+- [ ] Add `swarm preview` before file write so users can inspect team topology, tool scopes,
+      and a config diff before confirming changes
+- [ ] Support both interactive mode and non-interactive flags so teams can be created from CI,
+      scripts, or future UI layers using the same backend module
+
+---
+
 ## Methodological Guardrails (Reviewer Rules)
 
 *All three checks below were implemented in swarm_config.yml (`required_elements` +

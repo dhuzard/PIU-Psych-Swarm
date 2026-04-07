@@ -6,6 +6,12 @@ automation/graph.py
 automation/ingest.py
 automation/main.py
 automation/tools.py
+automation/builder/__init__.py
+automation/builder/doctor.py
+automation/builder/generator.py
+automation/builder/models.py
+automation/builder/templates.py
+automation/builder/wizard.py
 piu_psych_swarm.egg-info/PKG-INFO
 piu_psych_swarm.egg-info/SOURCES.txt
 piu_psych_swarm.egg-info/dependency_links.txt

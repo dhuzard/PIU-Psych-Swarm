@@ -16,6 +16,7 @@ Requires-Dist: typer>=0.12
 Requires-Dist: sentence-transformers>=3.0
 Requires-Dist: pypdf>=4.0
 Requires-Dist: python-dotenv>=1.0
+Requires-Dist: questionary>=2.0
 Requires-Dist: rich>=13.0
 Requires-Dist: pyyaml>=6.0
 Requires-Dist: jinja2>=3.1
@@ -86,6 +87,29 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 .\.venv\Scripts\python -m automation.main execute "Review the psychiatric literature on problematic internet use in adolescents, including prevalence, comorbidity, mechanisms, and interventions."
 ```
 
+## Create Your Own Swarm
+
+The repository now includes the first phase of an interactive swarm builder.
+
+Use the builder-backed command:
+
+```bash
+python -m automation.main init
+```
+
+Current capabilities:
+
+- create a valid `swarm_config.yml` from a typed builder spec
+- generate persona markdown files and `agents/*/KB/` folders
+- start from a recommended starter team or define specialist personas interactively
+- preview the resulting team before files are written
+
+For a non-interactive starter swarm:
+
+```bash
+python -m automation.main init --no-interactive --domain "Climate Science" --name "Climate Science Swarm"
+```
+
 ## Persona Squad
 
 | Agent | Icon | Role | Technical Focus |
@@ -93,6 +117,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 | Dr. Nexus | 👑 | Orchestrator | Coordination, synthesis, and reference management |
 | ClinicalPsych | 🧠 | Clinical specialist | Diagnosis, impairment, and comorbidity |
 | EpiScope | 📊 | Epidemiology specialist | Prevalence, psychometrics, risk and protective factors |
+| LitScout | 📚 | Literature specialist | Citation chaining, reference mining, and author-trail expansion |
 | NeuroCogs | 🧪 | Mechanisms specialist | Reward, executive control, neurocognition, imaging |
 | CarePath | 🛟 | Intervention specialist | Prevention, treatment, and care pathways |
 | Journalist | ✍️ | Scribe | Neutral, professional documentation and reporting |
@@ -117,6 +142,7 @@ Useful working files:
 | Tool | Purpose |
 | :--- | :--- |
 | search_pubmed | Search peer-reviewed biomedical and psychiatric literature |
+| trace_literature_network | Expand a major paper via its references and lead authors |
 | search_you_engine | Search the live web |
 | search_knowledge_base | Search local PIU literature packets in agents/*/KB/ |
 | scrape_webpage | Pull full-text content from URLs |
@@ -130,6 +156,39 @@ Useful working files:
 - automation/: Runtime, tools, ingestion, and graph logic
 - Drafts/: Prompt packs, workflow templates, and generated outputs
 - Knowledge_Traceability_Matrix.md: Running audit trail for evidence use
+
+## Next Step
+
+The next major module should be an interactive swarm builder so users can create their own personas, choose tools, set reviewer rules, and define orchestration behavior without hand-editing YAML.
+
+Implemented in Phase 1:
+
+- a typed `SwarmSpec` builder core
+- file generation for config, personas, and KB folders
+- a first `swarm init` command backed by that builder
+
+Recommended next implementation direction:
+
+- Keep `Typer` as the command surface because the repo already uses it successfully.
+- Add `Rich` for previews, validation panels, and diff-style summaries.
+- Add `Questionary` or `InquirerPy` for wizard-style prompts and persona editing flows.
+- Keep the builder engine separate from the CLI so the same core can later power a richer TUI or web UI.
+
+Planned command family:
+
+- `swarm init`: create a new swarm from an interactive wizard
+- `swarm persona add`: create a persona with role, tools, KB folder, and behavior template
+- `swarm persona edit`: update an existing persona interactively
+- `swarm team configure`: choose orchestrator, journalist, routing limits, and HITL settings
+- `swarm review configure`: set reviewer rules, banned words, and required elements
+- `swarm preview`: render the resulting team, tool map, and config diff before writing files
+- `swarm doctor`: validate the generated config, persona files, and KB layout
+
+Design principle:
+
+Build a schema-driven team-creation module first, then place an interactive CLI on top of it. The solid foundation is the model and validator layer, not the prompt loop.
+
+See [INTERACTIVE_SWARM_BUILDER_PLAN.md](INTERACTIVE_SWARM_BUILDER_PLAN.md) for the detailed architecture and implementation plan.
 
 ## Notes
 

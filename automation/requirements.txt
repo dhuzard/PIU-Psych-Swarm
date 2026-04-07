@@ -10,4 +10,5 @@ typer
 sentence-transformers
 pypdf
 python-dotenv
+questionary
 rich

@@ -55,6 +55,42 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 .\.venv\Scripts\python -m automation.main execute "Review the psychiatric literature on problematic internet use in adolescents, including prevalence, comorbidity, mechanisms, and interventions."
 ```
 
+## Create Your Own Swarm
+
+The repository now includes the first six phases of an interactive swarm builder.
+
+Use the builder-backed command:
+
+```bash
+python -m automation.main init
+```
+
+Current capabilities:
+
+- create a valid `swarm_config.yml` from a typed builder spec
+- generate persona markdown files and `agents/*/KB/` folders
+- start from a recommended starter team or define specialist personas interactively with richer prompts
+- preview file-level diffs before writes occur
+- inspect the active swarm with `python -m automation.main preview`
+- validate the active swarm with `python -m automation.main doctor`
+- add a persona with `python -m automation.main persona add`
+- edit a persona with `python -m automation.main persona edit`
+- configure orchestration and HITL with `python -m automation.main team configure`
+- configure reviewer policy with `python -m automation.main review configure`
+- configure the primary model with `python -m automation.main model configure`
+- configure swarm metadata with `python -m automation.main metadata configure`
+- curate the active tool registry with `python -m automation.main tools configure`
+- add a tool with `python -m automation.main tools add`
+- edit a tool with `python -m automation.main tools edit`
+- remove a tool with `python -m automation.main tools remove`
+- auto-repair safe filesystem issues with `python -m automation.main doctor --fix`
+
+For a non-interactive starter swarm:
+
+```bash
+python -m automation.main init --no-interactive --domain "Climate Science" --name "Climate Science Swarm"
+```
+
 ## Persona Squad
 
 | Agent | Icon | Role | Technical Focus |
@@ -101,6 +137,78 @@ Useful working files:
 - automation/: Runtime, tools, ingestion, and graph logic
 - Drafts/: Prompt packs, workflow templates, and generated outputs
 - Knowledge_Traceability_Matrix.md: Running audit trail for evidence use
+
+## Next Step
+
+The next major module should be an interactive swarm builder so users can create their own personas, choose tools, set reviewer rules, and define orchestration behavior without hand-editing YAML.
+
+Implemented in Phase 1:
+
+- a typed `SwarmSpec` builder core
+- file generation for config, personas, and KB folders
+- a first `swarm init` command backed by that builder
+
+Implemented in Phase 2:
+
+- richer interactive prompts with `Questionary` fallback to plain prompts when needed
+- `swarm preview` for readable inspection of the current team and tool registry
+- `swarm doctor` for config, file, KB, tool-import, and environment checks
+
+Implemented in Phase 3:
+
+- file-level diff previews before builder writes
+- `swarm persona add` for adding a persona into an existing swarm
+- `swarm persona edit` for editing an existing persona safely
+- `swarm doctor --fix` for safe repairs of missing KB directories and `.gitkeep` files
+
+Implemented in Phase 4:
+
+- `swarm team configure` for orchestrator, routing, and HITL configuration
+- `swarm review configure` for reviewer tone, bans, required elements, and model overrides
+- non-interactive option-driven config updates backed by the same builder core used by the interactive flow
+
+Implemented in Phase 5:
+
+- `swarm model configure` for provider, model name, temperature, and env-key changes
+- `swarm metadata configure` for name, description, output paths, and epistemic tags
+- `swarm tools configure` for active tool-registry curation with persona-tool synchronization
+
+Implemented in Phase 6:
+
+- `swarm tools add` for adding built-in or custom tool registry entries
+- `swarm tools edit` for updating existing tool registry entries
+- `swarm tools remove` for removing tool registry entries while protecting personas from ending up tool-less
+
+Recommended next implementation direction:
+
+- Keep `Typer` as the command surface because the repo already uses it successfully.
+- Add `Rich` for previews, validation panels, and diff-style summaries.
+- Keep `Questionary` and extend the wizard into persona editing flows.
+- Keep the builder engine separate from the CLI so the same core can later power a richer TUI or web UI.
+- Add template management, richer policy presets, and optional higher-level swarm blueprints on top of the existing targeted edit commands.
+
+Planned command family:
+
+- `swarm init`: create a new swarm from an interactive wizard
+- `swarm persona add`: create a persona with role, tools, KB folder, and behavior template
+- `swarm persona edit`: update an existing persona interactively
+- `swarm team configure`: choose orchestrator, journalist, routing limits, and HITL settings
+- `swarm review configure`: set reviewer rules, banned words, and required elements
+- `swarm model configure`: change provider, model name, temperature, and env key
+- `swarm metadata configure`: change swarm name, description, domain label, output paths, and epistemic tags
+- `swarm tools configure`: curate the active tool registry used by the current swarm
+- `swarm tools add`: add a built-in or custom tool registry entry
+- `swarm tools edit`: update a tool registry entry
+- `swarm tools remove`: remove a tool registry entry safely
+- `swarm preview`: render the current team, tool map, and config summary
+- `swarm doctor`: validate the generated config, persona files, KB layout, and tool wiring
+- `swarm doctor --fix`: repair the safe filesystem issues automatically
+
+Design principle:
+
+Build a schema-driven team-creation module first, then place an interactive CLI on top of it. The solid foundation is the model and validator layer, not the prompt loop.
+
+See [INTERACTIVE_SWARM_BUILDER_PLAN.md](INTERACTIVE_SWARM_BUILDER_PLAN.md) for the detailed architecture and implementation plan.
 
 ## Notes
 

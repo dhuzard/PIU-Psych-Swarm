@@ -49,7 +49,6 @@ def parse_persona_markdown(
         role=fallback_role,
         tools=tools,
         core_mission=core_mission,
-        domain_focus=_extract_section(lines, "Domain Focus"),
         kb_focus=_extract_section(lines, "Knowledge Base (KB) Focus"),
         behavior_rules=_extract_section(lines, "Behavior"),
     )

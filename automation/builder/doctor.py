@@ -28,6 +28,12 @@ WRITING_TOOLS = {
     "write_section",
 }
 
+REQUIRED_PERSONA_SECTIONS = {
+    "## Core Mission",
+    "## Knowledge Base (KB) Focus",
+    "## Behavior",
+}
+
 
 def _normalize_role(value: str) -> str:
     return " ".join(value.lower().split())
@@ -209,6 +215,47 @@ class SwarmDoctorReport:
         return self.error_count == 0
 
 
+def _check_persona_sections(report: SwarmDoctorReport, persona_name: str, persona_path: Path) -> None:
+    """Warn when a persona.md is missing any of the three required content sections."""
+    try:
+        headings = {
+            line.strip()
+            for line in persona_path.read_text(encoding="utf-8").splitlines()
+            if line.startswith("## ")
+        }
+    except OSError as exc:
+        report.issues.append(ValidationIssue("error", f"could not read persona file for '{persona_name}': {exc}", str(persona_path)))
+        return
+
+    for section in sorted(REQUIRED_PERSONA_SECTIONS - headings):
+        report.issues.append(ValidationIssue(
+            "warning",
+            f"persona '{persona_name}' is missing section '{section}' — loader will return empty value for this field",
+            str(persona_path),
+        ))
+
+
+def _check_tool_registry_sync(report: SwarmDoctorReport, config_tools: dict) -> None:
+    """Warn about config tools absent from BUILTIN_TOOL_REGISTRY.
+
+    Tools not in BUILTIN_TOOL_REGISTRY are custom additions. They work at runtime
+    (the import check catches broken ones), but will be silently dropped if the
+    swarm is ever regenerated with ``swarm init --force`` from a blueprint.
+    """
+    try:
+        from automation.builder.templates import BUILTIN_TOOL_REGISTRY
+    except Exception:
+        return  # builder not available in this context; skip
+
+    builtin_keys = set(BUILTIN_TOOL_REGISTRY.keys())
+    for tool_name in sorted(set(config_tools) - builtin_keys):
+        report.issues.append(ValidationIssue(
+            "warning",
+            f"tool '{tool_name}' is not in BUILTIN_TOOL_REGISTRY — it is a custom tool and will not be preserved by 'swarm init --force'",
+            "swarm_config.yml",
+        ))
+
+
 def inspect_swarm(root_dir: Path) -> SwarmDoctorReport:
     report = SwarmDoctorReport(root_dir=root_dir)
     config_path = root_dir / "swarm_config.yml"
@@ -266,6 +313,8 @@ def inspect_swarm(root_dir: Path) -> SwarmDoctorReport:
 
         if not persona_path.exists():
             report.issues.append(ValidationIssue("error", f"persona file missing for '{persona_name}'", str(persona_path)))
+        else:
+            _check_persona_sections(report, persona_name, persona_path)
         kb_dir = persona_path.parent / "KB"
         if not kb_dir.exists():
             report.issues.append(ValidationIssue("warning", f"KB directory missing for '{persona_name}'", str(kb_dir)))
@@ -290,6 +339,8 @@ def inspect_swarm(root_dir: Path) -> SwarmDoctorReport:
             getattr(module, function_name)
         except Exception as e:
             report.issues.append(ValidationIssue("error", f"tool '{tool_name}' failed to import: {e}", "swarm_config.yml"))
+
+    _check_tool_registry_sync(report, tools)
 
     env_key = config.get("model", {}).get("env_key", "OPENAI_API_KEY")
     if not os.getenv(env_key):

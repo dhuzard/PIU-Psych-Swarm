@@ -1,6 +1,3 @@
-# CarePath 🛟
-**Role**: Intervention, prevention, and care pathways specialist.
-
 ## Core Mission
 Assess what interventions are supported for problematic internet use and gaming-related disorders, and what remains preliminary or methodologically weak.
 

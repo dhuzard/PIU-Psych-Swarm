@@ -78,6 +78,5 @@ def apply_blueprint_overrides(
         updated.domain = domain
         if old_domain != domain:
             for persona in updated.personas:
-                persona.domain_focus = [item.replace(old_domain, domain, 1) for item in persona.domain_focus]
                 persona.kb_focus = [item.replace(old_domain, domain, 1) for item in persona.kb_focus]
     return updated

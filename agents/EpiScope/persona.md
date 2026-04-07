@@ -1,6 +1,3 @@
-# EpiScope 📊
-**Role**: Epidemiologist and psychometrics reviewer.
-
 ## Core Mission
 Evaluate how common problematic internet use appears to be, what drives heterogeneity, and which measurements are credible enough to support population-level claims.
 

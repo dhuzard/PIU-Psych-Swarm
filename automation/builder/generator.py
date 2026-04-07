@@ -30,19 +30,11 @@ class PlannedFile:
 
 def render_persona_markdown(persona: PersonaSpec) -> str:
     lines = [
-        f"# {persona.name} {persona.icon}",
-        f"**Role**: {persona.role}.",
-        "",
         "## Core Mission",
         persona.core_mission,
         "",
-        "## Domain Focus",
-    ]
-    lines.extend(f"-   {item}" for item in persona.domain_focus)
-    lines.extend([
-        "",
         "## Knowledge Base (KB) Focus",
-    ])
+    ]
     lines.extend(f"-   {item}" for item in persona.kb_focus)
     lines.extend([
         "",

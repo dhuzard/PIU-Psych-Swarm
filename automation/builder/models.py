@@ -24,7 +24,6 @@ class PersonaSpec(BaseModel):
     role: str
     tools: list[str] = Field(default_factory=list)
     core_mission: str
-    domain_focus: list[str] = Field(default_factory=list)
     kb_focus: list[str] = Field(default_factory=list)
     behavior_rules: list[str] = Field(default_factory=list)
 
@@ -49,7 +48,7 @@ class PersonaSpec(BaseModel):
             raise ValueError("persona must have at least one tool")
         return list(dict.fromkeys(tools))
 
-    @field_validator("domain_focus", "kb_focus", "behavior_rules")
+    @field_validator("kb_focus", "behavior_rules")
     @classmethod
     def normalize_bullets(cls, value: list[str]) -> list[str]:
         return [item.strip() for item in value if item and item.strip()]

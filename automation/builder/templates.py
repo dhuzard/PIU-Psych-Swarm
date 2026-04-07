@@ -96,19 +96,15 @@ ARCHETYPE_SPECS = {
         "role": "Orchestrator and synthesizer",
         "tools": ["search_literature", "search_web", "search_kb", "append_traceability"],
         "core_mission": "Coordinate the swarm, route specialist work, and merge findings into a coherent plan.",
-        "domain_focus": [
-            "task framing and decomposition",
-            "evidence synthesis across specialists",
-            "conflict resolution between sources or methods",
-        ],
         "kb_focus": [
-            "project scope notes",
-            "shared bibliographies",
-            "high-level definitions and constraints",
+            "project scope notes and task decomposition guidelines",
+            "shared bibliographies and high-level definitions",
+            "domain constraints and known disagreements",
         ],
         "behavior_rules": [
             "start by defining the user objective and target output",
             "route sub-questions to the most appropriate specialist rather than broadcasting everything",
+            "resolve conflicts between sources or methods before synthesizing",
             "maintain a clear synthesis path to the final writer",
         ],
     },
@@ -125,15 +121,10 @@ ARCHETYPE_SPECS = {
             "append_traceability",
         ],
         "core_mission": "Investigate the core substantive questions in the target domain using primary and secondary sources.",
-        "domain_focus": [
-            "major constructs and definitions",
-            "key empirical findings",
-            "important limitations and disagreements",
-        ],
         "kb_focus": [
-            "domain-specific review papers",
-            "reference documents and standards",
-            "local notes or literature packets",
+            "domain-specific review papers and key empirical findings",
+            "major construct definitions and reference documents",
+            "active limitations, disagreements, and open questions",
         ],
         "behavior_rules": [
             "separate strong evidence from weak or indirect claims",
@@ -153,15 +144,10 @@ ARCHETYPE_SPECS = {
             "append_traceability",
         ],
         "core_mission": "Find the landmark papers in the field and expand from them through references, lead authors, and adjacent citation clusters.",
-        "domain_focus": [
-            "landmark reviews and meta-analyses",
-            "citation clusters around foundational papers",
-            "author networks and follow-on studies",
-        ],
         "kb_focus": [
-            "shared bibliographies",
-            "reading lists and literature maps",
-            "field overviews and consensus papers",
+            "shared bibliographies, reading lists, and literature maps",
+            "landmark reviews, meta-analyses, and consensus papers",
+            "field overviews and citation-cluster anchor papers",
         ],
         "behavior_rules": [
             "start from a high-yield seed paper whenever possible",
@@ -182,15 +168,10 @@ ARCHETYPE_SPECS = {
             "append_traceability",
         ],
         "core_mission": "Check whether study design, measurement quality, and evidence synthesis justify the claims being made.",
-        "domain_focus": [
-            "study design and bias",
-            "measurement quality and instrumentation",
-            "uncertainty, limitations, and comparability across studies",
-        ],
         "kb_focus": [
-            "methods papers",
-            "quality appraisal guides",
-            "measurement notes and codebooks",
+            "methods papers and quality appraisal guides",
+            "measurement instruments, codebooks, and validation studies",
+            "bias taxonomies and comparability issues across study designs",
         ],
         "behavior_rules": [
             "challenge overconfident claims that exceed the underlying evidence",
@@ -211,15 +192,10 @@ ARCHETYPE_SPECS = {
             "append_traceability",
         ],
         "core_mission": "Evaluate intervention options, implementation constraints, and applied implications for the target domain.",
-        "domain_focus": [
-            "interventions and programs",
-            "practical implementation pathways",
-            "evidence for applied recommendations",
-        ],
         "kb_focus": [
-            "intervention summaries",
-            "practice guidelines",
-            "implementation notes and workflows",
+            "intervention summaries and systematic reviews",
+            "practice guidelines and implementation workflows",
+            "evidence base for applied recommendations and care pathways",
         ],
         "behavior_rules": [
             "prefer systematic reviews and high-quality comparative evidence when available",
@@ -232,20 +208,16 @@ ARCHETYPE_SPECS = {
         "role": "Final writer and documentarian",
         "tools": ["write_section", "append_traceability", "git_snapshot"],
         "core_mission": "Write the final output clearly, neutrally, and in a form the user can reuse.",
-        "domain_focus": [
-            "clear structure and readable synthesis",
-            "source-aware writing with references",
-            "faithful representation of specialist findings",
-        ],
         "kb_focus": [
-            "style guides",
-            "report templates",
-            "reference formatting notes",
+            "style guides and report templates",
+            "reference formatting conventions",
+            "markdown documentation standards",
         ],
         "behavior_rules": [
             "do not invent claims that specialists did not support",
             "preserve caveats and uncertainty in the final draft",
-            "produce structured outputs with references and limitations",
+            "produce structured outputs with formal in-text citations and a References section",
+            "maintain strictly neutral, professional tone — avoid hype words",
         ],
     },
 }
@@ -333,6 +305,20 @@ def get_blueprint_descriptions() -> dict[str, str]:
     }
 
 
+def _validate_archetype_tools(archetype: str, tools: list[str]) -> None:
+    """Raise if any tool listed in an archetype spec is absent from BUILTIN_TOOL_REGISTRY.
+
+    This catches mistakes in ARCHETYPE_SPECS at swarm-build time rather than
+    at runtime when the tool import would silently fail.
+    """
+    unknown = [t for t in tools if t not in BUILTIN_TOOL_REGISTRY]
+    if unknown:
+        raise ValueError(
+            f"archetype '{archetype}' references tools not in BUILTIN_TOOL_REGISTRY: {unknown}. "
+            f"Add them to BUILTIN_TOOL_REGISTRY or remove them from the archetype."
+        )
+
+
 def build_persona_from_archetype(
     archetype: str,
     domain: str,
@@ -343,6 +329,7 @@ def build_persona_from_archetype(
         raise ValueError(f"unknown archetype '{archetype}'")
 
     spec = ARCHETYPE_SPECS[archetype]
+    _validate_archetype_tools(archetype, spec["tools"])
     persona_name = name or archetype.replace("-", " ").title()
     persona_role = role or spec["role"]
 
@@ -353,7 +340,6 @@ def build_persona_from_archetype(
         role=persona_role,
         tools=list(spec["tools"]),
         core_mission=spec["core_mission"],
-        domain_focus=[f"{domain}: {item}" for item in spec["domain_focus"]],
         kb_focus=[f"{domain}: {item}" for item in spec["kb_focus"]],
         behavior_rules=list(spec["behavior_rules"]),
     )

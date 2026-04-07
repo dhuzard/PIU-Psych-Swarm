@@ -90,9 +90,13 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
       graph compiled with `MemorySaver` when `hitl.enabled: true`; stream loop in
       `main.py` detects `__interrupt__` events and resumes with `Command(resume=answer)`;
       fully autonomous when `hitl.enabled: false` (no checkpointer overhead)
-- [ ] Add async tool execution within specialists — currently all tool calls are
+- [x] Add async tool execution within specialists — currently all tool calls are
       synchronous and sequential; `asyncio` + `ToolNode` async variants would allow
       parallel `search_pubmed` + `search_semantic_scholar` within one specialist call
+      — `_run_tool_loop_async` added to `graph.py` using `model.ainvoke` +
+      `ToolNode.ainvoke` (concurrent tool dispatch via `asyncio.gather`);
+      specialist and journalist nodes are now `async def`; `main.py` streams via
+      `graph.astream` inside `asyncio.run(_run_graph_async(...))`
 - [x] Add token/cost tracking per run — `_extract_token_usage()` reads `usage_metadata`
       (LangChain ≥ 0.2) or `response_metadata.token_usage` (older); `_merge_token_usage`
       accumulates in `GraphState`; `main.py` writes `Drafts/run_metrics.json` with
@@ -108,9 +112,11 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
 - [x] Add AI-chatbot construct instability check to `reviewer.required_elements` —
       reviewer rejects any output on AI/LLM use that lacks a note on whether
       evidence meets clinical-level impairment criteria
-- [ ] Reviewer uses the same model name as research agents (only temperature differs);
+- [x] Reviewer uses the same model name as research agents (only temperature differs);
       for maximum adversarial diversity, configure a different model family
       (e.g., Anthropic claude-opus when agents run on gpt-4o, or vice versa)
+      — cross-provider examples (Anthropic claude-opus-4-6, Google gemini-1.5-pro)
+      added as commented blocks in `swarm_config.yml` under `reviewer.model`
 - [x] Add reviewer checks: prevalence claims must name instrument + cut-off; IGD mentions
       must clarify ICD-11 vs DSM-5 status; output must not imply pathology from frequency
       alone — all three enforced via `required_elements` and `rejection_patterns` in
@@ -125,10 +131,14 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
       `ClinicalPsych`, `EpiScope`, `NeuroCogs`, `CarePath`, `DrNexus`
       (15 peer-reviewed and preprint references across construct debate,
       scales, reward mechanisms, mental health correlates, and care implications)
-- [ ] Add separate KB packets for social media disorder, gaming disorder (IGD),
+- [x] Add separate KB packets for social media disorder, gaming disorder (IGD),
       and smartphone overuse (currently all live in the same general PIU KB)
-- [ ] Add intervention summaries for family-based, school-based, and telehealth
+      — dedicated `.md` files added to `ClinicalPsych/KB/`, `EpiScope/KB/`,
+      `NeuroCogs/KB/`, and `DrNexus/KB/` for all three constructs
+- [x] Add intervention summaries for family-based, school-based, and telehealth
       pathways to `CarePath/KB/`
+      — `family_based_interventions.md`, `school_based_interventions.md`, and
+      `telehealth_pathways.md` added with evidence summaries and key references
 - [x] Add traceability-matrix auto-header — `main.py` creates `Knowledge_Traceability_Matrix.md`
       with Markdown table header if absent; appends a dated run-separator
       (`### Run: YYYY-MM-DD HH:MM | Task: ...`) before each graph execution
@@ -140,9 +150,13 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
 - [x] Add `report` CLI command with output mode templates — `REPORT_MODES` dict in
       `main.py` with templates for `scoping-review`, `narrative-review`, `evidence-brief`;
       selectable via `--mode` flag; prepends mode instruction to the research prompt
-- [ ] Add optional screening prompts for adolescent, university, and general-adult
+- [x] Add optional screening prompts for adolescent, university, and general-adult
       populations (different PIU base-rates, instruments, and clinical thresholds apply)
-- [ ] Add prompt packs for grant support, manuscript drafting, and journalistic briefings
+      — `adolescent-screen`, `university-screen`, `general-adult-screen` modes added
+      to `REPORT_MODES` in `main.py`
+- [x] Add prompt packs for grant support, manuscript drafting, and journalistic briefings
+      — `grant-support`, `manuscript-draft`, `journalistic-brief` modes added to
+      `REPORT_MODES` in `main.py`; `report` command docstring and `--mode` help updated
 
 ---
 
@@ -168,20 +182,29 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
       tools from the CLI instead of only curating the built-in registry subset
 - [x] Replace the older `scaffold` path with the richer builder workflow and align the
       CLI creation path around `swarm init` (kept as a deprecated alias for compatibility)
-- [ ] Add persona templates for common roles: orchestrator, literature scout, critic,
+- [x] Add persona templates for common roles: orchestrator, literature scout, critic,
       methodology reviewer, scribe, and domain specialist
+      (`ARCHETYPE_SPECS` in `automation/builder/templates.py` — six archetypes:
+      `orchestrator`, `domain-specialist`, `literature-scout`, `methods-reviewer`,
+      `intervention-specialist`, `journalist`; used by `swarm persona add` and `swarm init`)
 - [x] Add `swarm doctor` validation: missing persona files, unknown tools, invalid routing,
       duplicate roles, empty KB paths, and reviewer rule inconsistencies
-- [ ] Add `swarm preview` before file write so users can inspect team topology, tool scopes,
+- [x] Add `swarm preview` before file write so users can inspect team topology, tool scopes,
       and a config diff before confirming changes
-- [ ] Support both interactive mode and non-interactive flags so teams can be created from CI,
+      (`preview_generation_diff()` called before every write in `main.py`;
+      `preview_swarm_spec()` called before confirmation in all builder commands)
+- [x] Support both interactive mode and non-interactive flags so teams can be created from CI,
       scripts, or future UI layers using the same backend module
+      (`--interactive/--no-interactive` flag on `swarm init`; `--yes` to skip confirmation;
+      `swarm scaffold` deprecated alias for fully non-interactive generation)
 - [x] Add named starter blueprints so users can begin from higher-level team presets instead of
       only one default research-core layout
 - [x] Add blueprint export/import so custom teams can be saved as portable YAML files and reused
       across repositories without hand-copying config and persona folders
-- [ ] Add richer blueprint packs and reusable policy presets for common workflows such as
+- [x] Add richer blueprint packs and reusable policy presets for common workflows such as
       evidence mapping, intervention assessment, and rapid briefing
+      (`BLUEPRINT_SPECS` in `automation/builder/templates.py` — four presets:
+      `research-core`, `literature-mapping`, `intervention-lab`, `rapid-brief`)
 
 ---
 

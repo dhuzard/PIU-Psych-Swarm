@@ -28,6 +28,7 @@ Stream loop design:
      and no checkpointer overhead.
 """
 
+import asyncio
 import datetime
 import json
 import uuid
@@ -119,6 +120,68 @@ REPORT_MODES = {
         "3–5 key findings (bullet points), brief methods note, "
         "2–3 actionable clinical or policy implications, and a caveats paragraph. "
         "Avoid jargon; spell out all acronyms on first use. "
+    ),
+    # ── Population-specific screening modes ──────────────────────────────
+    "adolescent-screen": (
+        "[REPORT MODE: ADOLESCENT SCREENING REVIEW] Focus on PIU, IGD, or social media "
+        "disorder in the 10–18 age group. Address: developmental context (social brain, "
+        "peer influence, sleep needs); screening instruments validated for adolescents "
+        "(C-VAT, YDQ, GAS, K-scale, SMDS); sex differences in prevalence and presentation; "
+        "school-based and family-based intervention options; safeguarding and consent "
+        "considerations. State instrument name and cut-off for every prevalence figure. "
+        "Distinguish normative heavy use from clinical impairment explicitly. "
+    ),
+    "university-screen": (
+        "[REPORT MODE: UNIVERSITY POPULATION REVIEW] Focus on PIU, IGD, or smartphone "
+        "overuse in university and college students (18–25). Address: autonomy transition "
+        "as a risk window; academic performance and PIU interactions; sleep disruption in "
+        "student populations; ADHD comorbidity as a vulnerability factor; university "
+        "counselling service delivery models; peer-support and digital self-help options. "
+        "Name instrument and cut-off for all prevalence claims. "
+    ),
+    "general-adult-screen": (
+        "[REPORT MODE: GENERAL ADULT POPULATION REVIEW] Focus on PIU constructs in adults "
+        "(18+), distinguishing from adolescent presentations where evidence differs. "
+        "Address: work-related compulsive internet use vs. leisure PIU; adult-normed "
+        "instruments (GPIUS2, IAT, BSMAS adult norms); occupational and relationship "
+        "impairment; workplace intervention and EAP referral pathways; age-related "
+        "decline in prevalence after 30. Name instrument and cut-off for all prevalence claims. "
+    ),
+    # ── Specialist prompt packs ───────────────────────────────────────────
+    "grant-support": (
+        "[REPORT MODE: GRANT SUPPORT] Produce a structured evidence synthesis suitable as "
+        "background material for a research grant application. Structure: "
+        "(1) Significance — size of the problem, burden of disease, unmet clinical need; "
+        "(2) State of Knowledge — key findings, consensus, and gaps; "
+        "(3) Innovation — what is unknown and why the proposed work is novel; "
+        "(4) Rigour concerns — limitations in existing literature that the proposed study "
+        "would address; (5) References — full citations in Vancouver style. "
+        "Write in third-person academic register. Flag every prevalence figure with "
+        "instrument name and cut-off. Use precise epistemic language (e.g., 'evidence "
+        "suggests' rather than 'it is established'). "
+    ),
+    "manuscript-draft": (
+        "[REPORT MODE: MANUSCRIPT DRAFT] Produce a full draft of a peer-reviewable "
+        "manuscript section by section. Follow standard psychiatric journal structure: "
+        "Abstract (background, methods, results, conclusions; max 250 words), "
+        "Introduction (context, gap, aim), Methods (search strategy, inclusion criteria, "
+        "data extraction), Results (organised by theme with evidence tables), "
+        "Discussion (interpretation, limitations, future directions), "
+        "Conclusions, References (Vancouver format). "
+        "Write in passive/third-person academic register throughout. "
+        "Flag every claim with in-text citation. Ensure limitations section addresses "
+        "cross-sectional designs, instrument heterogeneity, and sampling bias. "
+    ),
+    "journalistic-brief": (
+        "[REPORT MODE: JOURNALISTIC BRIEF] Write a plain-language journalism-ready "
+        "background brief (target ~600 words) for a science journalist or public "
+        "health communicator. Structure: lead paragraph summarising the key takeaway "
+        "in two sentences; 'What the research shows' (3–4 bullet points); "
+        "'What experts caution' (2–3 bullet points noting caveats and uncertainty); "
+        "'What this means in practice' (1–2 sentences); 'Key numbers to use' "
+        "(prevalence figures with instrument noted in parentheses). "
+        "Avoid clinical jargon. Do not overstate causal claims. "
+        "Explicitly flag any findings that are preliminary or from small samples. "
     ),
 }
 
@@ -237,16 +300,67 @@ def _handle_hitl_interrupt(interrupt_objs) -> str:
     return answer
 
 
+async def _run_graph_async(config: dict, prompt: str, graph, run_config: dict) -> dict:
+    """Async inner loop: streams the compiled graph and handles HITL interrupts.
+
+    Returns accumulated token_usage dict.
+    Specialist and Journalist nodes are async (using _run_tool_loop_async) so
+    multiple tool calls within a single agent turn run concurrently.
+    """
+    final_token_usage: dict = {}
+    current_input: dict | Command = {
+        "task": prompt,
+        "messages": [],
+        "agent_outputs": {},
+        "agent_assignments": {},
+        "next_agents": [],
+        "next_instructions": "",
+        "agent_call_count": 0,
+        "reviewer_approved": False,
+        "revision_count": 0,
+        "token_usage": {},
+    }
+
+    typer.secho("\n🧠 [SWARM ACTIVE] Streaming agent interactions...\n", fg=typer.colors.BLUE)
+
+    while True:
+        interrupted = False
+
+        async for event in graph.astream(
+            current_input,
+            config=run_config,
+            stream_mode="updates",
+        ):
+            # Accumulate token_usage from any node update that carries it
+            for node_name, update in event.items():
+                if isinstance(update, dict) and "token_usage" in update:
+                    for k, v in update["token_usage"].items():
+                        if isinstance(v, (int, float)):
+                            final_token_usage[k] = final_token_usage.get(k, 0) + v
+
+            # Check for interrupt before displaying messages
+            if "__interrupt__" in event:
+                interrupt_objs = event["__interrupt__"]
+                answer = _handle_hitl_interrupt(interrupt_objs)
+                current_input = Command(resume=answer)
+                interrupted = True
+                break
+
+            _display_event_messages(event)
+
+        if not interrupted:
+            break  # Graph completed naturally
+
+    return final_token_usage
+
+
 def _run_graph(config: dict, prompt: str) -> None:
     """Core graph execution shared by `execute` and `report` commands.
 
-    Stream loop:
-      - Uses stream_mode="updates" so interrupt events appear under
-        the "__interrupt__" key in the event dict.
-      - When HITL is disabled the loop runs once; no interrupt handling,
-        no checkpointer, no Command(resume=...) calls.
-      - When HITL is enabled the loop continues until the graph completes
-        naturally (no more interrupt events in the last batch of events).
+    Delegates to _run_graph_async via asyncio.run so that specialist nodes
+    can execute multiple tool calls concurrently within each agent turn.
+    Uses astream (stream_mode="updates") so interrupt events appear under
+    the "__interrupt__" key in the event dict.
     """
     try:
         warnings = validate_env(config)
@@ -279,56 +393,13 @@ def _run_graph(config: dict, prompt: str) -> None:
 
     graph = build_graph(config)
 
-    initial_state = {
-        "task": prompt,
-        "messages": [],
-        "agent_outputs": {},
-        "agent_assignments": {},
-        "next_agents": [],
-        "next_instructions": "",
-        "agent_call_count": 0,
-        "reviewer_approved": False,
-        "revision_count": 0,
-        "token_usage": {},
-    }
-
     # Thread config: required for MemorySaver interrupt/resume; empty dict otherwise.
     run_config = {"configurable": {"thread_id": str(uuid.uuid4())}} if hitl_enabled else {}
 
-    typer.secho("\n🧠 [SWARM ACTIVE] Streaming agent interactions...\n", fg=typer.colors.BLUE)
-
-    final_token_usage: dict = {}
-    current_input = initial_state   # first iteration: full state dict
-                                    # subsequent iterations (HITL only): Command(resume=...)
     try:
-        while True:
-            interrupted = False
-
-            for event in graph.stream(
-                current_input,
-                config=run_config,
-                stream_mode="updates",
-            ):
-                # Accumulate token_usage from any node update that carries it
-                for node_name, update in event.items():
-                    if isinstance(update, dict) and "token_usage" in update:
-                        for k, v in update["token_usage"].items():
-                            if isinstance(v, (int, float)):
-                                final_token_usage[k] = final_token_usage.get(k, 0) + v
-
-                # Check for interrupt before displaying messages
-                if "__interrupt__" in event:
-                    interrupt_objs = event["__interrupt__"]
-                    answer = _handle_hitl_interrupt(interrupt_objs)
-                    current_input = Command(resume=answer)
-                    interrupted = True
-                    break
-
-                _display_event_messages(event)
-
-            if not interrupted:
-                break  # Graph completed naturally
-
+        final_token_usage = asyncio.run(
+            _run_graph_async(config, prompt, graph, run_config)
+        )
     except Exception as e:
         typer.secho(f"\nExecution Error: {e}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
@@ -1067,7 +1138,11 @@ def report(
     mode: str = typer.Option(
         "narrative-review",
         "--mode", "-m",
-        help="Output format: scoping-review | narrative-review | evidence-brief",
+        help=(
+            "Output format: scoping-review | narrative-review | evidence-brief | "
+            "adolescent-screen | university-screen | general-adult-screen | "
+            "grant-support | manuscript-draft | journalistic-brief"
+        ),
     ),
 ):
     """
@@ -1076,13 +1151,24 @@ def report(
     Prepends a mode-specific template instruction to the prompt so the Journalist
     agent produces output in the correct format for the chosen report type.
 
-    Modes:
-      scoping-review    — JBI scoping review (coverage map, no recommendations)
-      narrative-review  — Full academic narrative review with abstract and sections
-      evidence-brief    — ~800-word plain-language brief for clinicians / policymakers
+    Academic modes:
+      scoping-review        — JBI scoping review (coverage map, no recommendations)
+      narrative-review      — Full academic narrative review with abstract and sections
+      evidence-brief        — ~800-word plain-language brief for clinicians / policymakers
+      manuscript-draft      — Full peer-reviewable manuscript draft with all sections
+
+    Population-specific screening modes:
+      adolescent-screen     — PIU/IGD review focused on the 10–18 age group
+      university-screen     — Review focused on university and college students (18–25)
+      general-adult-screen  — Review focused on adults 18+, adult-normed instruments
+
+    Specialist prompt packs:
+      grant-support         — Significance/innovation synthesis for grant background
+      journalistic-brief    — ~600-word plain-language press/communications brief
 
     Example:
-        python -m automation.main report "Prevalence of PIU in adolescents" --mode evidence-brief
+        python -m automation.main report "IGD in adolescents" --mode adolescent-screen
+        python -m automation.main report "CBT for PIU" --mode grant-support
     """
     try:
         config = load_config()

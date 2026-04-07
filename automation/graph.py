@@ -50,6 +50,7 @@ Human-in-the-Loop (HITL)
   the user, and resumes with Command(resume=answer).
 """
 
+import asyncio
 from typing import Annotated, TypedDict
 
 from pydantic import BaseModel
@@ -188,6 +189,32 @@ def _run_tool_loop(model, tools: list, messages: list, max_rounds: int):
         if not (hasattr(response, "tool_calls") and response.tool_calls):
             break
         tool_result = tool_executor.invoke({"messages": messages})
+        messages = messages + tool_result["messages"]
+    return response, usage
+
+
+async def _run_tool_loop_async(model, tools: list, messages: list, max_rounds: int):
+    """Async version of the agent ↔ tools loop.
+
+    Uses model.ainvoke and ToolNode.ainvoke so that multiple tool calls issued
+    in a single model response are executed concurrently (ToolNode.ainvoke
+    dispatches all tool_calls via asyncio.gather). Synchronous tool functions
+    are run in a thread-pool executor automatically by LangChain's async layer.
+
+    Returns (final_response, accumulated_token_usage).
+    """
+    tool_executor = ToolNode(tools)
+    response = None
+    usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    for _ in range(max_rounds):
+        response = await model.ainvoke(messages)
+        messages = list(messages) + [response]
+        round_usage = _extract_token_usage(response)
+        for k in usage:
+            usage[k] += round_usage.get(k, 0)
+        if not (hasattr(response, "tool_calls") and response.tool_calls):
+            break
+        tool_result = await tool_executor.ainvoke({"messages": messages})
         messages = messages + tool_result["messages"]
     return response, usage
 
@@ -331,7 +358,13 @@ def make_orchestrator_node(config: dict, specialist_names: list, routing_model,
 # ── Specialist node factory ────────────────────────────────────────────────
 
 def make_specialist_node(persona_name: str, config: dict, model, tools: list):
-    """Return a LangGraph node function for a specialist persona."""
+    """Return an async LangGraph node function for a specialist persona.
+
+    The node uses _run_tool_loop_async so that multiple tool calls issued in a
+    single model response (e.g., search_pubmed + search_semantic_scholar) are
+    dispatched concurrently via ToolNode.ainvoke / asyncio.gather. Synchronous
+    tool functions are transparently run in a thread-pool executor by LangChain.
+    """
     persona_cfg = get_persona_config(config, persona_name)
     system_prompt = build_agent_system_prompt(
         persona_cfg,
@@ -339,7 +372,7 @@ def make_specialist_node(persona_name: str, config: dict, model, tools: list):
     )
     max_rounds = config["orchestrator"].get("max_tool_rounds_per_agent", 5)
 
-    def specialist_node(state: GraphState):
+    async def specialist_node(state: GraphState):
         agent_instructions = (
             state.get("agent_assignments", {}).get(persona_name)
             or state.get("next_instructions")
@@ -355,7 +388,7 @@ def make_specialist_node(persona_name: str, config: dict, model, tools: list):
             f"YOUR SPECIFIC INSTRUCTIONS:\n{agent_instructions}\n\n"
             f"RELEVANT FINDINGS FROM COLLEAGUES:\n{peer_findings}"
         ))
-        response, usage = _run_tool_loop(
+        response, usage = await _run_tool_loop_async(
             model, tools,
             [SystemMessage(content=system_prompt), context],
             max_rounds,
@@ -375,13 +408,17 @@ def make_specialist_node(persona_name: str, config: dict, model, tools: list):
 # ── Journalist node ────────────────────────────────────────────────────────
 
 def make_journalist_node(config: dict, model, tools: list):
-    """Journalist receives full findings and writes the structured final output."""
+    """Journalist receives full findings and writes the structured final output.
+
+    Uses _run_tool_loop_async so that write_section + git_snapshot tool calls
+    can run concurrently if the model issues them together.
+    """
     journalist_name = config["orchestrator"]["journalist"]
     journalist_cfg = get_persona_config(config, journalist_name)
     system_prompt = build_agent_system_prompt(journalist_cfg)
     max_rounds = config["orchestrator"].get("max_tool_rounds_per_agent", 5)
 
-    def journalist_node(state: GraphState):
+    async def journalist_node(state: GraphState):
         full_findings = _format_findings(state.get("agent_outputs", {}))
         revision_note = ""
         if state.get("revision_count", 0) > 0:
@@ -402,7 +439,7 @@ def make_journalist_node(config: dict, model, tools: list):
             "Save the output to disk using write_manuscript_section, "
             "then call git_commit_snapshot."
         ))
-        response, usage = _run_tool_loop(
+        response, usage = await _run_tool_loop_async(
             model, tools,
             [SystemMessage(content=system_prompt), context],
             max_rounds,

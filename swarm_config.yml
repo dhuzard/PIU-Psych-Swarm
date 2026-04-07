@@ -223,9 +223,32 @@ reviewer:
   # Merges on top of the main model config — only override what differs.
   # Higher temperature (0.7–0.9) makes the reviewer more likely to find flaws.
   # If omitted, Reviewer-2 uses the same model as the research agents.
+  #
+  # ── Same provider, higher temperature (current setting) ─────────────────
+  # Reviewer-2 uses the same model family as agents (gpt-4o) but at higher
+  # temperature for more adversarial critique. This is the minimal diversity step.
   model:
     name: "gpt-4o"
     temperature: 0.8
+  #
+  # ── Cross-provider adversarial diversity (recommended for stronger review) ─
+  # For maximum adversarial diversity, switch Reviewer-2 to a different model
+  # family entirely. A Claude model reviewing GPT-4o agent output (or vice versa)
+  # brings genuinely different training biases and response patterns to the review.
+  # Uncomment and substitute credentials to enable:
+  #
+  # model:
+  #   provider: "anthropic"
+  #   name: "claude-opus-4-6"
+  #   temperature: 0.8
+  #   env_key: "ANTHROPIC_API_KEY"
+  #
+  # Or with Google Gemini as the adversarial reviewer:
+  # model:
+  #   provider: "google"
+  #   name: "gemini-1.5-pro"
+  #   temperature: 0.8
+  #   env_key: "GOOGLE_API_KEY"
 
   # Optional: Override the auto-generated reviewer prompt entirely.
   # Uncomment and edit to use a fully custom reviewer.

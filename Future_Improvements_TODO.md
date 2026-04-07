@@ -33,11 +33,13 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
 - [x] Fix `agent_call_count` to increment only for specialist dispatches
       (not for Journalist or END routing); gives full `max_agent_calls` budget
       for actual research calls
-- [ ] Allow per-agent instructions in parallel dispatch — currently all parallel
-      specialists receive the same `instructions` string; a `list[AgentAssignment]`
-      schema would allow differentiated guidance per parallel target
-- [ ] `create_model(config)` is instantiated fresh on every orchestrator and
-      specialist node call; cache or pre-bind at graph-build time to reduce overhead
+- [x] Allow per-agent instructions in parallel dispatch — `AgentAssignment(BaseModel)`
+      added to `OrchestratorDecision`; `agent_assignments: dict` in `GraphState`;
+      specialists read `state["agent_assignments"].get(name)` before falling back
+      to the shared `next_instructions`
+- [x] Cache `create_model(config)` at build time — all LLM instances created once in
+      `build_graph()`; specialist models pre-bound with `base_model.bind_tools(tools)`;
+      eliminates per-call API client instantiation
 
 ---
 
@@ -75,8 +77,9 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
       (`/news?url=...`); BeautifulSoup kept as fallback for API unavailability
 - [x] Assign `scrape_page` to all four research specialists in `swarm_config.yml`
       (was registered but unassigned)
-- [ ] Add Europe PMC or Crossref lookup for DOI resolution and richer citation metadata
-      (DOI, publication date, open-access PDF link)
+- [x] Add `lookup_doi` tool (Europe PMC primary + Crossref fallback) — no API key;
+      returns title, authors, journal, year, DOI, abstract snippet, OA PDF link;
+      registered in swarm_config.yml and assigned to all four research specialists
 - [x] Replace deprecated `langchain_community` embedding/vectorstore imports in
       `ingest.py` and `tools.py` with current `langchain-huggingface` / `langchain-chroma`;
       graceful fallback to `langchain_community` if new packages not installed;
@@ -84,8 +87,10 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
 - [ ] Add async tool execution within specialists — currently all tool calls are
       synchronous and sequential; `asyncio` + `ToolNode` async variants would allow
       parallel `search_pubmed` + `search_semantic_scholar` within one specialist call
-- [ ] Add token/cost tracking per agent per run — log input/output tokens and
-      estimated cost to a `run_metrics.json` alongside each Drafts/ output
+- [x] Add token/cost tracking per run — `_extract_token_usage()` reads `usage_metadata`
+      (LangChain ≥ 0.2) or `response_metadata.token_usage` (older); `_merge_token_usage`
+      accumulates in `GraphState`; `main.py` writes `Drafts/run_metrics.json` with
+      input/output/total tokens and estimated cost (gpt-4o list pricing)
 
 ---
 
@@ -118,28 +123,32 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
       and smartphone overuse (currently all live in the same general PIU KB)
 - [ ] Add intervention summaries for family-based, school-based, and telehealth
       pathways to `CarePath/KB/`
-- [ ] Add a traceability-matrix auto-header that inserts task date, target population,
-      and construct when a new run begins
+- [x] Add traceability-matrix auto-header — `main.py` creates `Knowledge_Traceability_Matrix.md`
+      with Markdown table header if absent; appends a dated run-separator
+      (`### Run: YYYY-MM-DD HH:MM | Task: ...`) before each graph execution
 
 ---
 
 ## Clinical Workflow & Output Templates
 
-- [ ] Add explicit output templates for scoping review, narrative review, and
-      evidence brief modes (selectable via CLI flag or prompt prefix)
+- [x] Add `report` CLI command with output mode templates — `REPORT_MODES` dict in
+      `main.py` with templates for `scoping-review`, `narrative-review`, `evidence-brief`;
+      selectable via `--mode` flag; prepends mode instruction to the research prompt
 - [ ] Add optional screening prompts for adolescent, university, and general-adult
       populations (different PIU base-rates, instruments, and clinical thresholds apply)
-- [ ] Add a `report-mode` command that writes directly into a dated draft template
-      (`Drafts/YYYY-MM-DD_<task>.md`) and increments on re-runs
 - [ ] Add prompt packs for grant support, manuscript drafting, and journalistic briefings
 
 ---
 
 ## Methodological Guardrails (Reviewer Rules)
 
-- [ ] Add reviewer check: reject outputs that imply all high-frequency internet use
-      is pathological (overpathologizing guard)
-- [ ] Add reviewer check: reject prevalence claims that do not name the screening
-      instrument and cut-off used
-- [ ] Add reviewer check: require explicit disorder-status clarification whenever
-      IGD or internet gaming disorder is mentioned (ICD-11 vs DSM-5 Section III)
+*All three checks below were implemented in swarm_config.yml (`required_elements` +
+`rejection_patterns`) and wired into the auto-generated reviewer prompt via
+`build_reviewer_prompt()` in config.py.*
+
+- [x] Reject outputs that imply high-frequency internet use is inherently pathological
+      without evidence of functional impairment (`rejection_patterns` key)
+- [x] Reject prevalence claims that do not name the screening instrument and cut-off
+      (`required_elements`: "…cut-off score used must be stated")
+- [x] Require explicit disorder-status clarification when IGD or internet gaming disorder
+      is mentioned (`required_elements`: "ICD-11 recognized vs. DSM-5 Section III")

@@ -3,12 +3,16 @@ main.py — CLI Entry Point for the Research Swarm
 
 Usage:
     python -m automation.main execute "Your research prompt here"
+    python -m automation.main report "Your prompt" --mode narrative-review
     python -m automation.main scaffold "Climate Science"
+    python -m automation.main info
 
 All behavior is driven by swarm_config.yml. Edit that file to
 customize personas, tools, reviewer constraints, and LLM backend.
 """
 
+import datetime
+import json
 import os
 import shutil
 from pathlib import Path
@@ -32,26 +36,89 @@ app = typer.Typer(
     add_completion=False,
 )
 
+# ── Report-mode templates ─────────────────────────────────────────────────
+REPORT_MODES = {
+    "scoping-review": (
+        "[REPORT MODE: SCOPING REVIEW] Follow JBI scoping review methodology. "
+        "Include: scope and eligibility criteria, search strategy and databases used, "
+        "a results charting table, and a discussion of evidence coverage and gaps. "
+        "Do NOT provide clinical recommendations — summarise what the literature covers "
+        "and where evidence is absent. "
+    ),
+    "narrative-review": (
+        "[REPORT MODE: NARRATIVE REVIEW] Write a structured narrative review suitable "
+        "for a psychiatric journal. Include: abstract, introduction, thematic synthesis "
+        "of evidence organised by sub-topic, discussion, limitations, and conclusions. "
+        "Use formal academic register throughout. "
+    ),
+    "evidence-brief": (
+        "[REPORT MODE: EVIDENCE BRIEF] Write a concise evidence brief (target ~800 words) "
+        "for a clinical or policy audience. Use plain language. Structure: "
+        "3–5 key findings (bullet points), brief methods note, "
+        "2–3 actionable clinical or policy implications, and a caveats paragraph. "
+        "Avoid jargon; spell out all acronyms on first use. "
+    ),
+}
 
-@app.command()
-def execute(prompt: str):
-    """
-    Execute an autonomous research task with the swarm.
+MATRIX_HEADER = (
+    "# Knowledge Traceability Matrix\n\n"
+    "| Source | Author/Agent | Claim | Method | Epistemic Tag |\n"
+    "|--------|-------------|-------|--------|---------------|\n"
+)
 
-    Pass a natural-language prompt describing what you want the agents to do.
-    The swarm will search, reason, validate, and write outputs to the Drafts/ folder.
 
-    Example:
-        python -m automation.main execute "Review the psychiatric literature on problematic internet use and summarize the findings."
-    """
-    # Load configuration
-    try:
-        config = load_config()
-    except (FileNotFoundError, ValueError) as e:
-        typer.secho(f"CONFIG ERROR: {e}", fg=typer.colors.RED)
-        raise typer.Exit(code=1)
+def _ensure_matrix_header(config: dict, task: str) -> None:
+    """Create the traceability matrix with its table header if it does not exist,
+    then append a run-separator line so each run's entries are clearly delimited."""
+    matrix_path = Path(
+        config["swarm"].get("traceability_matrix", "./Knowledge_Traceability_Matrix.md")
+    )
+    if not matrix_path.exists():
+        matrix_path.write_text(MATRIX_HEADER, encoding="utf-8")
 
-    # Validate environment variables
+    run_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    task_preview = task[:80] + "…" if len(task) > 80 else task
+    with open(matrix_path, "a", encoding="utf-8") as f:
+        f.write(f"\n### Run: {run_stamp} | Task: {task_preview}\n\n")
+
+
+def _write_run_metrics(config: dict, task: str, token_usage: dict) -> None:
+    """Write per-run token/cost metrics to Drafts/run_metrics.json."""
+    drafts_dir = Path(config["swarm"].get("output_dir", "./Drafts"))
+    drafts_dir.mkdir(parents=True, exist_ok=True)
+
+    # Rough cost estimate using gpt-4o list pricing ($/M tokens, 2025)
+    input_price_per_m = 2.50
+    output_price_per_m = 10.00
+    input_tok = token_usage.get("input_tokens", 0)
+    output_tok = token_usage.get("output_tokens", 0)
+    est_cost = (input_tok * input_price_per_m + output_tok * output_price_per_m) / 1_000_000
+
+    metrics = {
+        "run_date": datetime.datetime.now().isoformat(timespec="seconds"),
+        "task": task[:100] + "…" if len(task) > 100 else task,
+        "model": f"{config['model']['provider']}/{config['model']['name']}",
+        "input_tokens": input_tok,
+        "output_tokens": output_tok,
+        "total_tokens": token_usage.get("total_tokens", input_tok + output_tok),
+        "estimated_cost_usd": round(est_cost, 4),
+        "cost_note": "Estimate uses gpt-4o list pricing ($2.50/M input, $10/M output). "
+                     "Adjust for your model and negotiated rates.",
+    }
+
+    metrics_path = drafts_dir / "run_metrics.json"
+    with open(metrics_path, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
+
+    typer.secho(
+        f"\n📊 Token usage: {input_tok:,} in / {output_tok:,} out "
+        f"(est. ${est_cost:.4f})",
+        fg=typer.colors.CYAN,
+    )
+
+
+def _run_graph(config: dict, prompt: str) -> None:
+    """Core graph execution shared by `execute` and `report` commands."""
     try:
         warnings = validate_env(config)
         for w in warnings:
@@ -60,29 +127,32 @@ def execute(prompt: str):
         typer.secho(f"ENV ERROR: {e}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
+    _ensure_matrix_header(config, prompt)
+
     swarm_name = config["swarm"]["name"]
     typer.secho(f"🚀 Initializing {swarm_name} (multi-agent mode)...", fg=typer.colors.CYAN)
 
     graph = build_graph(config)
 
-    # Initial state: task is the user prompt; all other fields start empty/default.
-    # Each agent node builds its own system prompt from its persona file — no
-    # single swarm-level prompt is injected here.
     initial_state = {
         "task": prompt,
         "messages": [],
         "agent_outputs": {},
-        "next_agent": "",
+        "agent_assignments": {},
+        "next_agents": [],
         "next_instructions": "",
         "agent_call_count": 0,
         "reviewer_approved": False,
         "revision_count": 0,
+        "token_usage": {},
     }
 
     try:
         typer.secho(f"\n🧠 [SWARM ACTIVE] Streaming agent interactions...\n", fg=typer.colors.BLUE)
 
+        final_event = initial_state
         for event in graph.stream(initial_state, stream_mode="values"):
+            final_event = event
             latest_msg = event.get("messages", [])
             if not latest_msg:
                 continue
@@ -93,20 +163,13 @@ def execute(prompt: str):
 
             content = str(msg.content)
 
-            # Routing / orchestrator messages
             if content.startswith("[Orchestrator"):
                 typer.secho(f"  ↳ {content}", fg=typer.colors.CYAN)
-
-            # Specialist / journalist findings (brief audit entry)
             elif content.startswith("[") and "]: " in content:
                 typer.secho(f"  {content}", fg=typer.colors.GREEN)
-
-            # Reviewer decisions
             elif content.startswith("[Reviewer"):
                 colour = typer.colors.GREEN if "APPROVED" in content else typer.colors.RED
                 typer.secho(f"  {content}", fg=colour)
-
-            # Tool invocations surfaced via AIMessage tool_calls
             elif hasattr(msg, "tool_calls") and msg.tool_calls:
                 for tc in msg.tool_calls:
                     typer.secho(
@@ -118,9 +181,74 @@ def execute(prompt: str):
         output_dir = config["swarm"].get("output_dir", "./Drafts")
         typer.secho(f"📂 Outputs saved to '{output_dir}/'", fg=typer.colors.CYAN)
 
+        # Write token/cost metrics using the accumulated state from the final event
+        _write_run_metrics(config, prompt, final_event.get("token_usage", {}))
+
     except Exception as e:
         typer.secho(f"Execution Error: {e}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
+
+
+@app.command()
+def execute(prompt: str):
+    """
+    Execute an autonomous research task with the swarm.
+
+    Pass a natural-language prompt describing what you want the agents to do.
+    The swarm will search, reason, validate, and write outputs to the Drafts/ folder.
+
+    Example:
+        python -m automation.main execute "Review the psychiatric literature on PIU."
+    """
+    try:
+        config = load_config()
+    except (FileNotFoundError, ValueError) as e:
+        typer.secho(f"CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    _run_graph(config, prompt)
+
+
+@app.command()
+def report(
+    prompt: str,
+    mode: str = typer.Option(
+        "narrative-review",
+        "--mode", "-m",
+        help="Output format: scoping-review | narrative-review | evidence-brief",
+    ),
+):
+    """
+    Execute a structured research task with an explicit report format.
+
+    Prepends a mode-specific template instruction to the prompt so the Journalist
+    agent produces output in the correct format for the chosen report type.
+
+    Modes:
+      scoping-review    — JBI scoping review (coverage map, no recommendations)
+      narrative-review  — Full academic narrative review with abstract and sections
+      evidence-brief    — ~800-word plain-language brief for clinicians / policymakers
+
+    Example:
+        python -m automation.main report "Prevalence of PIU in adolescents" --mode evidence-brief
+    """
+    try:
+        config = load_config()
+    except (FileNotFoundError, ValueError) as e:
+        typer.secho(f"CONFIG ERROR: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    if mode not in REPORT_MODES:
+        typer.secho(
+            f"Unknown mode '{mode}'. Choose from: {', '.join(REPORT_MODES)}",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(code=1)
+
+    template = REPORT_MODES[mode]
+    full_prompt = template + prompt
+    typer.secho(f"📋 Report mode: {mode}", fg=typer.colors.CYAN)
+    _run_graph(config, full_prompt)
 
 
 @app.command()
@@ -168,7 +296,6 @@ def scaffold(domain: str):
         else:
             typer.secho(f"  ⏭️  Exists:  {persona_file}", fg=typer.colors.YELLOW)
 
-    # Create a domain-specific config if one doesn't exist
     config_file = Path("swarm_config.yml")
     if config_file.exists():
         typer.secho(
@@ -229,6 +356,8 @@ def info():
                 f"(journalist: {orch.get('journalist', 'Journalist')}, "
                 f"max_agent_calls: {orch.get('max_agent_calls', 8)}, "
                 f"max_tool_rounds: {orch.get('max_tool_rounds_per_agent', 5)})")
+
+    typer.secho(f"\n📋 Report modes: {', '.join(REPORT_MODES)}")
 
     reviewer = config["reviewer"]
     r_status = "✅ Enabled" if reviewer.get("enabled", True) else "❌ Disabled"

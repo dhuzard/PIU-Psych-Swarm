@@ -548,10 +548,120 @@ def scrape_webpage(url: str, max_chars: int = 5000) -> str:
     except Exception as e:
         return f"Error fetching {url}: {e}"
 
+@tool
+def lookup_doi(query: str) -> str:
+    """Look up full publication metadata via Europe PMC and Crossref.
+    No API key required — both APIs are open.
 
-# ═══════════════════════════════════════════════════════
-# KNOWLEDGE BASE TOOL (Bridges ingest.py → LangGraph)
-# ═══════════════════════════════════════════════════════
+    Use this after search_pubmed or search_preprints returns a DOI or partial
+    reference, to retrieve full citation details: title, authors, journal, year,
+    abstract, and open-access PDF link.
+
+    Args:
+        query: A DOI (e.g. '10.1016/j.addbeh.2025.107964') or a title/keyword
+               string for Crossref fuzzy search.
+    """
+    import urllib.parse
+
+    # Detect whether the input looks like a DOI
+    clean = query.strip().removeprefix("https://doi.org/").removeprefix("doi.org/")
+    is_doi = clean.startswith("10.")
+
+    # ── Europe PMC — preferred for open-access biomedical content ──────────
+    if is_doi:
+        try:
+            epmc_url = (
+                "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+                f"?query=DOI:{urllib.parse.quote(clean)}&format=json&resultType=core"
+            )
+            r = requests.get(epmc_url, timeout=15)
+            r.raise_for_status()
+            results = r.json().get("resultList", {}).get("result", [])
+            if results:
+                art = results[0]
+                title = art.get("title", "No title")
+                authors = art.get("authorString", "Unknown authors")
+                journal = art.get("journalTitle", "")
+                year = art.get("pubYear", "")
+                doi = art.get("doi", clean)
+                abstract = (art.get("abstractText") or "No abstract available.")[:400]
+                pmcid = art.get("pmcid", "")
+                pdf_url = (
+                    f"https://europepmc.org/articles/{pmcid}/pdf/render"
+                    if pmcid else ""
+                )
+                return (
+                    f"Title: {title}\n"
+                    f"Authors: {authors}\n"
+                    f"Journal: {journal} ({year})\n"
+                    f"DOI: {doi}\n"
+                    f"Abstract: {abstract}\n"
+                    + (f"OA PDF: {pdf_url}" if pdf_url else "PDF: not available via Europe PMC")
+                )
+        except Exception:
+            pass  # Fall through to Crossref
+
+    # ── Crossref — broader journal/conference coverage ─────────────────────
+    try:
+        if is_doi:
+            crossref_url = f"https://api.crossref.org/works/{urllib.parse.quote(clean)}"
+            r = requests.get(
+                crossref_url,
+                headers={"User-Agent": "PIU-Psych-Swarm/1.0 (mailto:research@example.com)"},
+                timeout=15,
+            )
+            r.raise_for_status()
+            item = r.json().get("message", {})
+            items = [item]
+        else:
+            crossref_url = "https://api.crossref.org/works"
+            r = requests.get(
+                crossref_url,
+                params={"query": query, "rows": 3},
+                headers={"User-Agent": "PIU-Psych-Swarm/1.0 (mailto:research@example.com)"},
+                timeout=15,
+            )
+            r.raise_for_status()
+            items = r.json().get("message", {}).get("items", [])
+
+        if not items:
+            return f"No results found for: '{query}' on Europe PMC or Crossref."
+
+        output = []
+        for item in items[:3]:
+            title_parts = item.get("title", ["No title"])
+            title = title_parts[0] if title_parts else "No title"
+            doi = item.get("DOI", "")
+            year = str(item.get("published", {}).get("date-parts", [[""]])[0][0])
+            container = item.get("container-title", [""])
+            journal = container[0] if container else ""
+            author_list = item.get("author", [])
+            authors = ", ".join(
+                f"{a.get('family', '')} {a.get('given', '')[:1]}."
+                for a in author_list[:3]
+            )
+            if len(author_list) > 3:
+                authors += " et al."
+            url = item.get("URL", f"https://doi.org/{doi}" if doi else "")
+
+            output.append(
+                f"Title: {title}\n"
+                f"Authors: {authors}\n"
+                f"Journal: {journal} ({year})\n"
+                f"DOI: {doi}\n"
+                f"URL: {url}"
+            )
+
+        return "\n\n---\n\n".join(output)
+
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "?"
+        return f"Crossref HTTP {status} error for '{query}': {e}"
+    except Exception as e:
+        return f"Error in lookup_doi for '{query}': {e}"
+
+
+
 
 
 def _get_active_agent_names() -> list[str]:

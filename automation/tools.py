@@ -275,87 +275,236 @@ def append_traceability_matrix(fact: str, source: str, epistemic_tag: str) -> st
 
 
 @tool
-def search_you_engine(query: str) -> str:
-    """Searches the live web using the You.com API.
-    Use this to find current news, web pages, or broad research that
-    requires live web context outside of specialized literature databases."""
+def search_you_engine(query: str, num_results: int = 5) -> str:
+    """Searches the live web using the You.com Search API.
+    Returns real-time, LLM-ready web results with titles, URLs, and snippets.
+    Use for discovering recent papers, preprint pages, news, and grey literature
+    not covered by search_pubmed or search_preprints.
+
+    If results are empty, try narrowing the query or use you_research for a
+    synthesised answer instead.
+
+    Args:
+        query: Search terms.
+        num_results: Number of results to return (default 5).
+    """
     api_key = os.getenv("YOU_API_KEY")
     if not api_key:
         return "ERROR: 'YOU_API_KEY' is not set in the environment variables."
 
-    url = "https://ydc-index.io/v1/search"
     headers = {"X-API-Key": api_key, "Accept": "application/json"}
-    params = {"query": query}
+    params = {"query": query, "num_web_results": num_results}
 
     try:
-        resp = requests.get(url, headers=headers, params=params)
+        resp = requests.get(
+            "https://api.ydc-index.io/search",
+            headers=headers,
+            params=params,
+            timeout=15,
+        )
         resp.raise_for_status()
         data = resp.json()
 
-        snippets = []
-        web_results = data.get("results", {}).get("web", [])
-        if not web_results:
-            return f"No web results found on You.com. Raw response structure: {list(data.keys())}"
+        # Current API returns {"hits": [...]}
+        # Older API returned {"results": {"web": [...]}} — handle both
+        hits = data.get("hits") or data.get("results", {}).get("web", [])
 
-        for count, hit in enumerate(web_results[:5]):
-            title = hit.get("title", "No Title")
-            link = hit.get("url", "No URL")
-            description = "\n".join(hit.get("snippets", []))
-            if not description:
-                description = hit.get("description", "No Snippet")
-            snippets.append(
-                f"{count+1}. Title: {title}\nURL: {link}\nSnippet: {description}"
+        if not hits:
+            return (
+                f"No results found on You.com Search for: '{query}'. "
+                f"Response keys: {list(data.keys())}. "
+                "Try you_research or search_preprints instead."
             )
 
-        return "\n\n".join(snippets)
+        output = []
+        for i, hit in enumerate(hits[:num_results], 1):
+            title = hit.get("title", "No title")
+            url = hit.get("url", "")
+            # Snippets may be a list or a single string depending on API version
+            snippets = hit.get("snippets", [])
+            snippet = " ".join(snippets) if isinstance(snippets, list) else snippets
+            if not snippet:
+                snippet = hit.get("description", "No snippet.")
+            output.append(f"{i}. {title}\n   URL: {url}\n   {snippet}")
+
+        return "\n\n".join(output)
+
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "?"
+        return (
+            f"You.com Search HTTP {status} error: {e}. "
+            "Check that YOU_API_KEY is valid and has Search access."
+        )
     except Exception as e:
-        return f"Error contacting You.com API: {e}"
+        return f"Error contacting You.com Search API: {e}"
+
+
+@tool
+def you_research(query: str, num_web_results: int = 5) -> str:
+    """Uses the You.com Research API to produce a synthesised, cited answer
+    for a specific sub-question. You.com searches the web, reads multiple
+    pages, and returns a structured answer with inline citations and sources.
+
+    Use this when search_pubmed + search_preprints return insufficient evidence
+    and you need a synthesised answer rather than raw paper lists. Call at most
+    once per sub-question — it is the most expensive tool in the chain.
+
+    Treat the output as a starting synthesis to critically evaluate through
+    your domain expertise, not as a citable source in itself.
+
+    Args:
+        query: A precise, self-contained research question.
+        num_web_results: Number of web sources You.com reads internally (default 5).
+    """
+    api_key = os.getenv("YOU_API_KEY")
+    if not api_key:
+        return "ERROR: 'YOU_API_KEY' is not set in the environment variables."
+
+    headers = {"X-API-Key": api_key, "Accept": "application/json"}
+    params = {"query": query, "num_web_results": num_web_results}
+
+    try:
+        resp = requests.get(
+            "https://api.ydc-index.io/rag",
+            headers=headers,
+            params=params,
+            timeout=30,  # Research takes longer than Search
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        answer = data.get("answer", "").strip()
+        sources = data.get("sources", data.get("hits", []))
+
+        if not answer:
+            return (
+                f"You.com Research returned no answer for: '{query}'. "
+                f"Response keys: {list(data.keys())}. "
+                "Try search_web or search_preprints instead."
+            )
+
+        source_lines = []
+        for i, src in enumerate(sources[:8], 1):
+            title = src.get("title", "Untitled")
+            url = src.get("url", "")
+            snippet = src.get("snippet", src.get("description", ""))[:200]
+            source_lines.append(f"  [{i}] {title}\n      {url}\n      {snippet}")
+
+        sources_block = "\n".join(source_lines) if source_lines else "  (no sources returned)"
+
+        return (
+            f"[You.com Research — synthesised answer]\n\n"
+            f"{answer}\n\n"
+            f"Sources consulted:\n{sources_block}\n\n"
+            "[NOTE: Treat this as a starting synthesis. Verify key claims against "
+            "primary sources before citing.]"
+        )
+
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "?"
+        if status == 429:
+            return (
+                "You.com Research rate limit hit. Wait and retry, "
+                "or use search_web + scrape_page as an alternative."
+            )
+        return (
+            f"You.com Research HTTP {status} error: {e}. "
+            "Check that YOU_API_KEY is valid and has Research (RAG) access."
+        )
+    except Exception as e:
+        return f"Error contacting You.com Research API: {e}"
 
 
 @tool
 def scrape_webpage(url: str, max_chars: int = 5000) -> str:
-    """Fetches and extracts the main text content from a given URL.
-    Use this when you need the full content of a specific page discovered
-    via web search, not just a snippet.
+    """Fetches clean Markdown content from a URL using the You.com Contents API.
+    Handles JavaScript-rendered pages, publisher sites, and preprint servers
+    that raw HTTP requests cannot parse reliably.
+
+    Use after search_web or search_preprints returns a URL you need to read
+    in full — methodology sections, preprint abstracts, supplementary data.
+
+    Falls back to direct HTTP + BeautifulSoup if YOU_API_KEY is not set or
+    the Contents API returns an error.
 
     Args:
-        url: The full URL to fetch and extract text from.
+        url: The full URL to fetch.
         max_chars: Maximum characters to return (default 5000).
     """
+    api_key = os.getenv("YOU_API_KEY")
+
+    # ── Primary path: You.com Contents API ──────────────────────────────
+    if api_key:
+        try:
+            headers = {"X-API-Key": api_key, "Accept": "application/json"}
+            params = {"url": url}
+            resp = requests.get(
+                "https://api.ydc-index.io/news",
+                headers=headers,
+                params=params,
+                timeout=20,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            # Contents API may return {"content": "...", "markdown": "..."}
+            # or a list of results — handle both shapes
+            content = ""
+            if isinstance(data, dict):
+                content = (
+                    data.get("markdown")
+                    or data.get("content")
+                    or data.get("text")
+                    or ""
+                )
+            elif isinstance(data, list) and data:
+                first = data[0]
+                content = (
+                    first.get("markdown")
+                    or first.get("content")
+                    or first.get("text")
+                    or ""
+                )
+
+            if content:
+                if len(content) > max_chars:
+                    content = (
+                        content[:max_chars]
+                        + f"\n\n[… truncated at {max_chars} chars]"
+                    )
+                return f"Content from {url} (via You.com Contents API):\n\n{content}"
+
+            # If the API returned something but no recognised content field,
+            # fall through to the BeautifulSoup fallback below
+        except Exception:
+            pass  # Fall through to BeautifulSoup fallback
+
+    # ── Fallback: direct HTTP + BeautifulSoup ───────────────────────────
     try:
         from bs4 import BeautifulSoup
-    except ImportError:
-        return (
-            "ERROR: beautifulsoup4 is not installed. "
-            "Run: pip install beautifulsoup4"
-        )
-
-    try:
-        headers = {"User-Agent": "ResearchSwarm/1.0 (Academic Research Bot)"}
-        resp = requests.get(url, headers=headers, timeout=15)
+        req_headers = {"User-Agent": "PIU-Psych-Swarm/1.0 (Academic Research)"}
+        resp = requests.get(url, headers=req_headers, timeout=15)
         resp.raise_for_status()
 
         soup = BeautifulSoup(resp.text, "html.parser")
-
-        # Remove non-content elements
-        for element in soup(["script", "style", "nav", "footer", "header"]):
-            element.decompose()
-
-        # Extract main text
+        for tag in soup(["script", "style", "nav", "footer", "header"]):
+            tag.decompose()
         text = soup.get_text(separator="\n", strip=True)
 
-        # Truncate if needed
         if len(text) > max_chars:
             text = (
                 text[:max_chars]
-                + f"\n\n[... truncated at {max_chars} chars. "
-                f"Full page is {len(text)} chars.]"
+                + f"\n\n[… truncated at {max_chars} chars]"
             )
+        return f"Content from {url} (via direct fetch):\n\n{text}"
 
-        return f"Content from {url}:\n\n{text}"
-
+    except ImportError:
+        return (
+            f"Could not fetch {url}: YOU_API_KEY not set and beautifulsoup4 "
+            "is not installed. Run: pip install beautifulsoup4"
+        )
     except Exception as e:
-        return f"Error scraping {url}: {e}"
+        return f"Error fetching {url}: {e}"
 
 
 # ═══════════════════════════════════════════════════════

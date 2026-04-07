@@ -58,6 +58,8 @@ personas:
       - search_preprints
       - search_web
       - search_kb
+      - scrape_page
+      - you_research
 
   - name: "EpiScope"
     icon: "📊"
@@ -68,6 +70,8 @@ personas:
       - search_preprints
       - search_web
       - search_kb
+      - scrape_page
+      - you_research
 
   - name: "NeuroCogs"
     icon: "🧪"
@@ -78,6 +82,8 @@ personas:
       - search_preprints
       - search_web
       - search_kb
+      - scrape_page
+      - you_research
 
   - name: "CarePath"
     icon: "🛟"
@@ -88,6 +94,8 @@ personas:
       - search_preprints
       - search_web
       - search_kb
+      - scrape_page
+      - you_research
 
   - name: "Journalist"
     icon: "✍️"
@@ -142,6 +150,11 @@ tools:
     module: "automation.tools"
     function: "search_semantic_scholar"
     description: "Search Semantic Scholar for preprints, CHI papers, and recent publications not yet on PubMed"
+
+  you_research:
+    module: "automation.tools"
+    function: "you_research"
+    description: "You.com Research API: multi-step web synthesis with inline citations for a specific sub-question"
 
   git_snapshot:
     module: "automation.tools"

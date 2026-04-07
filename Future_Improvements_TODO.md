@@ -67,6 +67,14 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
       registered as `search_preprints` and assigned to all four research specialists
 - [x] Add `Search Fallback` rule to all specialist `persona.md` files:
       if `search_literature` returns empty → try `search_preprints` → then `search_web`
+- [x] Fix `search_you_engine` base URL (legacy `ydc-index.io` endpoint → `api.ydc-index.io`)
+      and update response parsing for current API response structure
+- [x] Add `you_research` tool (You.com Research / RAG API) — synthesised answer with citations;
+      assigned to ClinicalPsych, EpiScope, NeuroCogs, CarePath
+- [x] Replace `scrape_webpage` BeautifulSoup implementation with You.com Contents API
+      (`/news?url=...`); BeautifulSoup kept as fallback for API unavailability
+- [x] Assign `scrape_page` to all four research specialists in `swarm_config.yml`
+      (was registered but unassigned)
 - [ ] Add Europe PMC or Crossref lookup for DOI resolution and richer citation metadata
       (DOI, publication date, open-access PDF link)
 - [ ] Replace deprecated `langchain_community` embedding/vectorstore imports in

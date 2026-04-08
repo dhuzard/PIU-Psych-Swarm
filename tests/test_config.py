@@ -70,36 +70,32 @@ def config_file(tmp_path):
     return tmp_path
 
 
-def test_load_config_returns_dict(config_file, monkeypatch):
+def test_load_config_returns_dict(config_file):
     """load_config() should return a dict with the expected top-level keys."""
-    monkeypatch.chdir(config_file)
     from automation.config import load_config
-    cfg = load_config()
+    cfg = load_config(config_path=config_file / "swarm_config.yml")
     assert isinstance(cfg, dict)
     assert "swarm" in cfg
     assert "personas" in cfg
     assert "orchestrator" in cfg
 
 
-def test_load_config_missing_file(tmp_path, monkeypatch):
+def test_load_config_missing_file(tmp_path):
     """load_config() should raise FileNotFoundError when swarm_config.yml is absent."""
-    monkeypatch.chdir(tmp_path)
     from automation.config import load_config
     with pytest.raises(FileNotFoundError):
-        load_config()
+        load_config(config_path=tmp_path / "swarm_config.yml")
 
 
-def test_load_config_swarm_name(config_file, monkeypatch):
+def test_load_config_swarm_name(config_file):
     """Swarm name from YAML is correctly parsed."""
-    monkeypatch.chdir(config_file)
     from automation.config import load_config
-    cfg = load_config()
+    cfg = load_config(config_path=config_file / "swarm_config.yml")
     assert cfg["swarm"]["name"] == "Test Swarm"
 
 
-def test_load_config_persona_count(config_file, monkeypatch):
+def test_load_config_persona_count(config_file):
     """Config should contain exactly the personas defined in the YAML."""
-    monkeypatch.chdir(config_file)
     from automation.config import load_config
-    cfg = load_config()
+    cfg = load_config(config_path=config_file / "swarm_config.yml")
     assert len(cfg["personas"]) == 2

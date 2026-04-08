@@ -43,43 +43,28 @@ def test_lookup_doi_returns_string():
 
 
 def test_append_traceability_matrix_returns_string(tmp_path):
-    """append_traceability_matrix should return a string and write to the matrix file."""
-    matrix_path = tmp_path / "Knowledge_Traceability_Matrix.md"
-    matrix_path.write_text(
+    """append_traceability_matrix always returns a string (success or failure message)."""
+    from automation.tools import append_traceability_matrix
+
+    # The tool resolves the matrix path relative to tools.py, so patch the
+    # file existence check and file read to simulate a properly initialised matrix.
+    matrix_content = (
         "# Knowledge Traceability Matrix\n\n"
         "| Source | Author/Agent | Claim | Method | Epistemic Tag |\n"
         "|--------|-------------|-------|--------|---------------|\n"
     )
-
-    import os
-    original_cwd = os.getcwd()
-    os.chdir(tmp_path)
-
-    # Write a minimal swarm_config.yml so load_config() works
-    (tmp_path / "swarm_config.yml").write_text(
-        "swarm:\n  traceability_matrix: './Knowledge_Traceability_Matrix.md'\n"
-        "  name: 'test'\n  description: 'test'\n  output_dir: './Drafts'\n"
-        "orchestrator:\n  agent: 'O'\n  journalist: 'J'\n"
-        "  max_agent_calls: 1\n  max_tool_rounds_per_agent: 1\n"
-        "model:\n  provider: 'openai'\n  name: 'gpt-4o'\n"
-        "  temperature: 0.2\n  env_key: 'OPENAI_API_KEY'\n"
-        "personas: []\ntools: {}\n"
-        "reviewer:\n  enabled: false\n  max_revision_loops: 1\n"
-        "  banned_words: []\n  required_elements: []\n"
-        "  rejection_patterns: []\n  tone: 'neutral'\n"
-        "hitl:\n  enabled: false\n  checkpoints: []\n"
-        "epistemic_tags: ['[FACT]']\n"
-    )
-
-    try:
-        from automation.tools import append_traceability_matrix
+    with patch("automation.tools.os.path.exists", return_value=True), \
+         patch("builtins.open", MagicMock(return_value=MagicMock(
+             __enter__=MagicMock(return_value=MagicMock(
+                 read=MagicMock(return_value=matrix_content),
+                 write=MagicMock()
+             )),
+             __exit__=MagicMock(return_value=False)
+         ))), \
+         patch("pathlib.Path.read_text", return_value=matrix_content):
         result = append_traceability_matrix.invoke({
+            "fact": "Test claim about internet use.",
             "source": "PubMed PMID:12345",
-            "agent": "TestAgent",
-            "claim": "Test claim",
-            "method": "Database search",
-            "tag": "[FACT]"
+            "epistemic_tag": "[FACT]",
         })
-        assert isinstance(result, str)
-    finally:
-        os.chdir(original_cwd)
+    assert isinstance(result, str)

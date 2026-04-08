@@ -1,6 +1,6 @@
-.PHONY: setup run ingest info scaffold test clean help
+.PHONY: setup run ingest info scaffold doctor lint format test clean help
 
-# PIU Psych Swarm — Makefile
+# Research Swarm — Makefile
 
 VENV     = .venv
 
@@ -30,13 +30,16 @@ endif
 
 help:
 	@$(BLANK_LINE_CMD)
-	@echo   PIU Psych Swarm — Available Commands
+	@echo   Research Swarm — Available Commands
 	@echo   ====================================
 	@echo   make setup       Create venv, install deps, copy .env.example
 	@echo   make run         Run the swarm (set PROMPT="your prompt")
 	@echo   make ingest      Vectorize documents from active agents/*/KB/ folders
 	@echo   make info        Display the current swarm configuration
+	@echo   make doctor      Validate config, files, KB, and tool wiring
 	@echo   make scaffold    Scaffold a new domain (set DOMAIN="your domain")
+	@echo   make lint        Run ruff linter on automation/
+	@echo   make format      Run ruff formatter on automation/
 	@echo   make test        Run the test suite
 	@echo   make clean       Remove venv and cached files
 	@$(BLANK_LINE_CMD)
@@ -49,14 +52,15 @@ setup:
 	@$(ENV_COPY_CMD)
 	@$(BLANK_LINE_CMD)
 	@echo Setup complete.
-	@echo    1. Edit .env with your API keys
-	@echo    2. Run: make info
-	@echo    3. Run: make run PROMPT="Review problematic internet use in adolescents"
+	@echo    1. Edit .env with your API keys  (see .env.example for instructions)
+	@echo    2. Run: make doctor  (validate configuration)
+	@echo    3. Run: make ingest  (build local knowledge base)
+	@echo    4. Run: make run PROMPT="Your research question"
 
 run:
 ifndef PROMPT
 	@echo ERROR: Please provide a prompt.
-	@echo Usage: make run PROMPT="Review the psychiatric literature on problematic internet use"
+	@echo Usage: make run PROMPT="Your research question here"
 	@exit /b 1
 endif
 	$(PYTHON) -m automation.main execute "$(PROMPT)"
@@ -68,6 +72,9 @@ ingest:
 info:
 	$(PYTHON) -m automation.main info
 
+doctor:
+	$(PYTHON) -m automation.main doctor
+
 scaffold:
 ifndef DOMAIN
 	@echo ERROR: Please provide a domain name.
@@ -76,7 +83,19 @@ ifndef DOMAIN
 endif
 	$(PYTHON) -m automation.main scaffold "$(DOMAIN)"
 
+lint:
+	$(PYTHON) -m ruff check automation/
+
+format:
+	$(PYTHON) -m ruff format automation/
+
 test:
+	@if [ ! -d tests ]; then \
+		echo "No tests/ directory found."; \
+		echo "Create it with: mkdir tests/"; \
+		echo "See CONTRIBUTING.md for testing guidance."; \
+		exit 0; \
+	fi
 	$(PYTHON) -m pytest tests/ -v
 
 clean:

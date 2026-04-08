@@ -32,7 +32,7 @@ examples/                 ← Reference domain implementations (do not modify ro
 - **Do not commit `.env` files.** `.env.example` is the only secrets template that should be tracked.
 - **Do not run `git add -A` or `git add .`.** The `git_commit_snapshot` tool in `tools.py` explicitly stages only safe paths (`Drafts/` and the traceability matrix). Unrestricted `git add` risks staging `.env`, credentials, or binary data.
 - **Do not modify `swarm_config.yml` in the repo root when working on an example.** Examples under `examples/*/` have their own independent `swarm_config.yml`.
-- **Do not add `langchain-huggingface` or `langchain-chroma` to `pyproject.toml` `[dependencies]`.** These are graceful-fallback imports in `ingest.py` and `tools.py` to avoid breaking installations that lack those packages.
+- **Do not add `langchain-huggingface` or `langchain-chroma` to `pyproject.toml` `[dependencies]`.** These are used via graceful try/except fallback in `ingest.py` and `tools.py` — if unavailable, the code falls back to the equivalent `langchain_community` classes. Adding them as hard dependencies would break installations on environments that can't build them. `langchain-text-splitters` IS a hard dependency (direct import in `ingest.py`) and IS in `pyproject.toml`.
 - **Do not use `asyncio.run()` inside tool functions.** Tool functions execute inside an already-running async event loop via `asyncio.gather` in `graph.py`. Use synchronous `requests` calls inside tool functions.
 
 ---

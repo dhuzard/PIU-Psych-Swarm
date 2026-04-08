@@ -241,12 +241,12 @@ research-swarm/
 
 See the `examples/` folder for complete, ready-to-use swarm configurations:
 
-- **`examples/piu_psychiatry/`** — A full six-specialist psychiatric research team for problematic internet use, with pre-populated knowledge bases, curated prompt sets, and domain-specific reviewer constraints. See its [README](examples/piu_psychiatry/README.md).
-- **`examples/climate_science/`** — Climate adaptation research team.
-- **`examples/financial_modeling/`** — Financial analysis team.
-- **`examples/legal_tech/`** — Legal research team.
+- **`examples/piu_psychiatry/`** — A complete six-specialist psychiatric research team for problematic internet use (PIU), with pre-populated knowledge bases, curated prompt sets, and domain-specific reviewer constraints. See its [README](examples/piu_psychiatry/README.md).
+- `examples/climate_science/` — *(configuration stub — full agents/ and README coming soon)*
+- `examples/financial_modeling/` — *(configuration stub — full agents/ and README coming soon)*
+- `examples/legal_tech/` — *(configuration stub — full agents/ and README coming soon)*
 
-To deploy an example:
+To deploy the PIU psychiatry example:
 
 ```bash
 cp examples/piu_psychiatry/swarm_config.yml .
@@ -254,6 +254,8 @@ cp -r examples/piu_psychiatry/agents .
 make ingest
 make run PROMPT="Your first question"
 ```
+
+To contribute a complete example for another domain, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
@@ -287,4 +289,4 @@ MIT — see [LICENSE](LICENSE) for details.
 
 ## Contributing
 
-Issues, bug reports, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and [INTERACTIVE_SWARM_BUILDER_PLAN.md](INTERACTIVE_SWARM_BUILDER_PLAN.md) for the planned feature roadmap.
+Issues, bug reports, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

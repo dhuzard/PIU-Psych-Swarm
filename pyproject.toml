@@ -18,6 +18,7 @@ dependencies = [
     "langchain-openai>=0.3",
     "langchain-core>=0.3",
     "langchain-community>=0.3",
+    "langchain-text-splitters>=0.3",
     "langgraph>=0.2",
     "chromadb>=0.5",
     "typer>=0.12",
@@ -30,6 +31,7 @@ dependencies = [
     "jinja2>=3.1",
     "requests>=2.31",
     "beautifulsoup4>=4.12",
+    "pydantic>=2.0",
 ]
 
 [project.optional-dependencies]

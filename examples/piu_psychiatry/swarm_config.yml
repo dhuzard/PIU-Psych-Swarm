@@ -3,47 +3,31 @@
 # ═══════════════════════════════════════════════════════════════
 # This file defines EVERYTHING about your research swarm:
 # personas, tools, LLM backend, reviewer constraints, and prompts.
-#
 # Fork this repo → edit this file → run your own domain-specific swarm.
 # You should NEVER need to edit Python code to customize behavior.
-#
-# GETTING STARTED:
-#   1. Edit the 'swarm' section below to name your swarm and set the domain.
-#   2. Rename the personas to match your team (e.g., rename "Specialist1" to
-#      "EpiScope" or "PolicyAnalyst").
-#   3. Edit each persona's 'persona_file' path to match the new name.
-#   4. Rename the corresponding folder in agents/ to match.
-#   5. Populate agents/YourAgent/KB/ with domain-specific documents.
-#   6. Customize the reviewer constraints for your domain's standards.
-#   7. Run: make ingest && make run PROMPT="Your first research question"
-#
-# Or use the interactive builder:
-#   python -m automation.main init
 # ═══════════════════════════════════════════════════════════════
 
 # ── Swarm Identity ───────────────────────────────────
 swarm:
-  name: "My-Research-Swarm"
-  description: "Autonomous research swarm for [your domain]"
+  name: "PIU-Psych-Squad"
+  description: "Autonomous Research Swarm for psychiatric study of problematic internet use"
   output_dir: "./Drafts"
   traceability_matrix: "./Knowledge_Traceability_Matrix.md"
 
 # ── Orchestrator Settings ────────────────────────────
 # Controls the multi-agent supervisor pattern.
-# agent:                    persona name that acts as orchestrator (must exist in personas list)
-# journalist:               persona name that writes final structured output
+# agent:     persona name that acts as orchestrator (must exist in personas list)
+# journalist: persona name that writes final structured output
 # max_agent_calls:          total specialist invocations before forcing Journalist
 # max_tool_rounds_per_agent: tool-use loop limit inside each specialist call
 orchestrator:
-  agent: "Orchestrator"
+  agent: "Dr. Nexus"
   journalist: "Journalist"
   max_agent_calls: 8
   max_tool_rounds_per_agent: 5
 
 # ── LLM Backend ─────────────────────────────────────
 # Supported providers: openai, anthropic, google
-# Change provider and name to switch the model used by all agents.
-# Use 'python -m automation.main model configure' to change this interactively.
 model:
   provider: "openai"
   name: "gpt-4o"
@@ -54,25 +38,21 @@ model:
 # Each persona has a name, icon, role description, a persona file
 # loaded at runtime (the persona.md in agents/), and a list of
 # tool keys (from the tools section below) they are allowed to use.
-#
-# To add a persona: python -m automation.main persona add
-# To edit a persona: python -m automation.main persona edit
-# To preview the team: python -m automation.main preview
 personas:
-  - name: "Orchestrator"
+  - name: "Dr. Nexus"
     icon: "👑"
-    role: "Research orchestrator — coordinates specialists, synthesizes findings, manages task decomposition"
-    persona_file: "./agents/Orchestrator/persona.md"
+    role: "Orchestrator & Synthesizer"
+    persona_file: "./agents/DrNexus/persona.md"
     tools:
       - search_web
       - search_literature
       - search_kb
       - append_traceability
 
-  - name: "Specialist1"
-    icon: "🔬"
-    role: "Domain specialist 1 — rename and customize for your first area of expertise"
-    persona_file: "./agents/Specialist1/persona.md"
+  - name: "ClinicalPsych"
+    icon: "🧠"
+    role: "Clinical psychiatrist for diagnosis, impairment, and comorbidity"
+    persona_file: "./agents/ClinicalPsych/persona.md"
     tools:
       - search_literature
       - search_preprints
@@ -82,10 +62,10 @@ personas:
       - you_research
       - lookup_doi
 
-  - name: "Specialist2"
+  - name: "EpiScope"
     icon: "📊"
-    role: "Domain specialist 2 — rename and customize for your second area of expertise"
-    persona_file: "./agents/Specialist2/persona.md"
+    role: "Epidemiologist and psychometrics reviewer"
+    persona_file: "./agents/EpiScope/persona.md"
     tools:
       - search_literature
       - search_preprints
@@ -97,7 +77,7 @@ personas:
 
   - name: "LitScout"
     icon: "📚"
-    role: "Literature cartographer — citation chaining, landmark-paper identification, author-trail expansion"
+    role: "Scientific literature cartographer for citation chaining and author-trail expansion"
     persona_file: "./agents/LitScout/persona.md"
     tools:
       - search_literature
@@ -106,9 +86,35 @@ personas:
       - lookup_doi
       - scrape_page
 
+  - name: "NeuroCogs"
+    icon: "🧪"
+    role: "Mechanisms and neurocognition specialist"
+    persona_file: "./agents/NeuroCogs/persona.md"
+    tools:
+      - search_literature
+      - search_preprints
+      - search_web
+      - search_kb
+      - scrape_page
+      - you_research
+      - lookup_doi
+
+  - name: "CarePath"
+    icon: "🛟"
+    role: "Intervention, prevention, and care pathways specialist"
+    persona_file: "./agents/CarePath/persona.md"
+    tools:
+      - search_literature
+      - search_preprints
+      - search_web
+      - search_kb
+      - scrape_page
+      - you_research
+      - lookup_doi
+
   - name: "Journalist"
     icon: "✍️"
-    role: "Observer & Scribe — structured, neutral final output"
+    role: "Observer & Scribe"
     persona_file: "./agents/Journalist/persona.md"
     tools:
       - write_section
@@ -119,7 +125,6 @@ personas:
 # Map logical tool names to Python module + function.
 # To add a custom tool: create a Python function decorated
 # with @tool, then register it here.
-# Use 'python -m automation.main tools add' to add tools interactively.
 tools:
   search_literature:
     module: "automation.tools"
@@ -183,9 +188,7 @@ tools:
 
 # ── Reviewer-2 (Adversarial Checkpoint) ──────────────
 # The Reviewer gates all final outputs. Customize its
-# constraints for your domain's epistemological standards.
-#
-# Use 'python -m automation.main review configure' to edit interactively.
+# constraints for your domain.
 reviewer:
   enabled: true
   max_revision_loops: 3
@@ -199,16 +202,19 @@ reviewer:
     - "unprecedented"
 
   # Structural elements the output MUST contain
-  # Customize these for your domain's reporting standards.
   required_elements:
+    - "a section that distinguishes high engagement from clinically impairing use"
     - "a short limitations section"
     - "in-text citations (e.g., [1], [2])"
     - "a formal 'References' or 'Reference List' section at the bottom"
+    - "when discussing AI-chatbot or LLM use, a note on the conceptual instability of the construct and whether evidence meets clinical-level impairment criteria"
+    - "when citing a prevalence figure, the name of the screening instrument and the cut-off score used must be stated; prevalence claims without this information must be rejected"
+    - "when gaming disorder or internet gaming disorder is mentioned, explicit clarification of its diagnostic status (ICD-11 recognized vs. DSM-5 Section III research category) is required"
 
-  # Patterns that trigger automatic rejection
-  # Add domain-specific claims that must be rejected if unsupported.
+  # Patterns that trigger automatic rejection — output must not imply pathology from
+  # frequency alone.
   rejection_patterns:
-    - "any causal claim that is not supported by experimental or longitudinal evidence"
+    - "any claim that frequent or heavy internet use is inherently pathological without evidence of functional impairment"
 
   # Tone enforcement
   tone: "strictly factual, objective, and neutral"
@@ -218,14 +224,17 @@ reviewer:
   # Higher temperature (0.7–0.9) makes the reviewer more likely to find flaws.
   # If omitted, Reviewer-2 uses the same model as the research agents.
   #
-  # ── Same provider, higher temperature ──────────────────────────────────────
+  # ── Same provider, higher temperature (current setting) ─────────────────
+  # Reviewer-2 uses the same model family as agents (gpt-4o) but at higher
+  # temperature for more adversarial critique. This is the minimal diversity step.
   model:
     name: "gpt-4o"
     temperature: 0.8
   #
-  # ── Cross-provider adversarial diversity (recommended for stronger review) ──
-  # A Claude model reviewing GPT-4o agent output (or vice versa) brings
-  # genuinely different training biases and response patterns to the review.
+  # ── Cross-provider adversarial diversity (recommended for stronger review) ─
+  # For maximum adversarial diversity, switch Reviewer-2 to a different model
+  # family entirely. A Claude model reviewing GPT-4o agent output (or vice versa)
+  # brings genuinely different training biases and response patterns to the review.
   # Uncomment and substitute credentials to enable:
   #
   # model:
@@ -242,15 +251,16 @@ reviewer:
   #   env_key: "GOOGLE_API_KEY"
 
   # Optional: Override the auto-generated reviewer prompt entirely.
-  # Uncomment and edit to use a fully custom reviewer prompt.
+  # Uncomment and edit to use a fully custom reviewer.
   # custom_prompt: |
-  #   You are a [domain] compliance reviewer. You read the agent output.
-  #   If the output contains [specific violation], REJECT it.
+  #   You are a financial compliance reviewer. You read the agent's output.
+  #   If the output contains forward-looking statements without disclaimers,
+  #   or if projections are not clearly labeled as estimates, REJECT it.
 
 # ── Human-in-the-Loop (HITL) Checkpoints ─────────────
 # When enabled, the swarm pauses at configured points and asks the user
 # a focused QC question before continuing. Uses LangGraph interrupt().
-# Set enabled: false for fully autonomous runs (default behavior).
+# Set enabled: false for fully autonomous runs (default behaviour).
 #
 # Available checkpoints:
 #   pre_flight      — confirm task scope before the graph starts (CLI prompt, no interrupt)
@@ -272,3 +282,4 @@ epistemic_tags:
   - "[FACT]"
   - "[INFERENCE]"
   - "[SPECULATION]"
+

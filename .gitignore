@@ -7,10 +7,19 @@ venv/
 env/
 .env
 
-# Data and Indexes (based on project history)
+# Build / packaging artifacts
+*.egg-info/
+dist/
+build/
+
+# Data and Indexes
 .byegpt/
 chroma.sqlite3
 *.bin
+chroma_db/
+
+# Generated outputs (kept for audit trail, not for distribution)
+Drafts/run_metrics.json
 
 # OS
 .DS_Store

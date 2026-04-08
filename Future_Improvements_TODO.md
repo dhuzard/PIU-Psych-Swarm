@@ -1,4 +1,4 @@
-# PIU Psych Swarm — Improvements & Fix Tracker
+# Research Swarm — Improvements & Fix Tracker
 
 Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
 
@@ -22,7 +22,7 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
 
 ---
 
-## Orchestrator (Dr. Nexus)
+## Orchestrator
 
 - [x] Structured output routing via `OrchestratorDecision` Pydantic model
       (`reasoning`, `next_agents: list[str]`, `instructions`)
@@ -72,7 +72,7 @@ Items are grouped by theme. `[x]` = implemented and pushed. `[ ]` = pending.
 - [x] Fix `search_you_engine` base URL (legacy `ydc-index.io` endpoint → `api.ydc-index.io`)
       and update response parsing for current API response structure
 - [x] Add `you_research` tool (You.com Research / RAG API) — synthesised answer with citations;
-      assigned to ClinicalPsych, EpiScope, NeuroCogs, CarePath
+      assigned to all research specialist agents
 - [x] Replace `scrape_webpage` BeautifulSoup implementation with You.com Contents API
       (`/news?url=...`); BeautifulSoup kept as fallback for API unavailability
 - [x] Assign `scrape_page` to all four research specialists in `swarm_config.yml`

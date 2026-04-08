@@ -1,17 +1,18 @@
-# Quickstart: Run the PIU Psych Swarm
+# Quickstart: Run Research Swarm
 
-This guide takes you from clone to first run for a psychiatric literature workflow focused on problematic internet use.
+This guide takes you from clone to first run in five steps.
 
 ## Prerequisites
 
 - Python 3.10+
-- An OpenAI API key, or another supported provider key if you retarget the model config
+- An OpenAI API key (or another supported provider key — see `swarm_config.yml`)
 - Optional: a You.com API key for live web search
 
 Platform notes:
-
 - Linux or Windows WSL: install `python3`, `python3-venv`, and `make`
 - Native Windows: use PowerShell with the `py` launcher; `make` is not required
+
+---
 
 ## Step 1: Clone and Setup
 
@@ -23,11 +24,10 @@ cd piu-psych-swarm
 make setup
 ```
 
-If your system does not provide `python3` yet, install it first. On Ubuntu or WSL:
+If your system does not provide `python3` yet:
 
 ```bash
-sudo apt update
-sudo apt install -y python3 python3-venv make
+sudo apt update && sudo apt install -y python3 python3-venv make
 ```
 
 ### Native Windows (PowerShell)
@@ -41,16 +41,48 @@ py -3 -m venv .venv
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
+---
+
 ## Step 2: Add API Keys
 
-Set the required keys in .env.
+Edit `.env` with the required keys:
 
 ```env
 OPENAI_API_KEY=sk-your-key
-YOU_API_KEY=your-you-key
+YOU_API_KEY=your-you-key    # optional — enables live web search
 ```
 
-## Step 3: Build the Local Knowledge Base
+---
+
+## Step 3: Configure Your Team
+
+The default template contains five generic personas. Before running, either:
+
+**Option A — Use the interactive builder** to define your domain and team:
+
+```bash
+python -m automation.main init
+```
+
+**Option B — Edit the template directly:**
+
+1. Open `swarm_config.yml` and set `swarm.name` and `swarm.description`.
+2. Rename `Specialist1` and `Specialist2` to match your domain roles.
+3. Rename the corresponding folders in `agents/` to match.
+4. Edit each `agents/*/persona.md` to define the agent's focus and behavior.
+
+**Option C — Deploy a ready-made example** (e.g., the PIU psychiatry team):
+
+```bash
+cp examples/piu_psychiatry/swarm_config.yml .
+cp -r examples/piu_psychiatry/agents .
+```
+
+---
+
+## Step 4: Build the Knowledge Base
+
+Vectorize any documents you placed in `agents/*/KB/`:
 
 ### Linux or Windows WSL
 
@@ -64,58 +96,62 @@ make ingest
 .\.venv\Scripts\python -m automation.ingest
 ```
 
-This vectorizes the active personas' KB folders so local literature notes are searchable.
+This creates a local ChromaDB vector store from the KB files so agents can search them. If your KB folders are empty, the swarm will still run — it will rely on live search tools instead.
 
-## Step 4: Verify the Active Team
+---
+
+## Step 5: Verify the Team and Run
 
 ### Linux or Windows WSL
 
 ```bash
-make info
+make info    # inspect the active team, tools, and reviewer config
+make run PROMPT="Your research question here"
 ```
 
 ### Native Windows (PowerShell)
 
 ```powershell
 .\.venv\Scripts\python -m automation.main info
+.\.venv\Scripts\python -m automation.main execute "Your research question here"
 ```
 
-You should see the PIU team: Dr. Nexus, ClinicalPsych, EpiScope, LitScout, NeuroCogs, CarePath, and Journalist.
+---
 
-## Step 5: Run a First PIU Task
+## Structured Report Modes
 
-### Linux or Windows WSL
+Use `report` instead of `execute` to request a specific output format:
 
 ```bash
-make run PROMPT="Review the psychiatric literature on problematic internet use in adolescents, including prevalence, comorbidity, mechanisms, and interventions."
+python -m automation.main report "Your question" --mode scoping-review
+python -m automation.main report "Your question" --mode evidence-brief
+python -m automation.main report "Your question" --mode grant-support
+python -m automation.main report "Your question" --mode manuscript-draft
 ```
 
-### Native Windows (PowerShell)
+Available modes: `scoping-review`, `narrative-review`, `evidence-brief`, `manuscript-draft`, `grant-support`, `journalistic-brief`, `pediatric-screen`, `young-adult-screen`, `general-adult-screen`
 
-```powershell
-.\.venv\Scripts\python -m automation.main execute "Review the psychiatric literature on problematic internet use in adolescents, including prevalence, comorbidity, mechanisms, and interventions."
-```
-
-## Ready-to-Use Prompt Ideas
-
-```bash
-make run PROMPT="Compare problematic internet use and internet gaming disorder as psychiatric constructs, including diagnostic cautions."
-make run PROMPT="Draft a neutral evidence brief on problematic internet use and sleep disturbance in adolescents."
-make run PROMPT="Create a literature map of problematic internet use among university students, including prevalence, depression, anxiety, and interventions."
-```
+---
 
 ## Key Working Files
 
-- Drafts/piu_prompt_set.md
-- Drafts/piu_study_workflow_template.md
-- Article_Draft.md
-- Knowledge_Traceability_Matrix.md
+After a run, check these locations for outputs:
+
+- `Drafts/` — all generated documents and section drafts
+- `Knowledge_Traceability_Matrix.md` — evidence audit trail with epistemic tags
+- `Drafts/run_metrics.json` — token usage and estimated cost per run
+
+---
 
 ## Troubleshooting
 
 | Problem | Solution |
 | :--- | :--- |
-| CONFIG ERROR | Ensure swarm_config.yml exists and is valid |
-| ENV ERROR | Add required API keys to .env |
-| No Knowledge Base found | Run make ingest |
-| Tool import failures | Run make setup again or install missing dependencies into .venv |
+| `CONFIG ERROR` | Ensure `swarm_config.yml` exists and is valid YAML. Run `make doctor`. |
+| `ENV ERROR` | Add required API keys to `.env` |
+| No Knowledge Base found | Run `make ingest` |
+| Tool import failures | Run `make setup` again or install missing dependencies into `.venv` |
+| Persona not found | Ensure persona names in `swarm_config.yml` match folder names in `agents/` |
+| Empty outputs | Check `Drafts/` folder; run `make info` to verify tool wiring |
+
+Run `python -m automation.main doctor` at any time to validate your configuration.

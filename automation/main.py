@@ -122,30 +122,29 @@ REPORT_MODES = {
         "Avoid jargon; spell out all acronyms on first use. "
     ),
     # ── Population-specific screening modes ──────────────────────────────
-    "adolescent-screen": (
-        "[REPORT MODE: ADOLESCENT SCREENING REVIEW] Focus on PIU, IGD, or social media "
-        "disorder in the 10–18 age group. Address: developmental context (social brain, "
-        "peer influence, sleep needs); screening instruments validated for adolescents "
-        "(C-VAT, YDQ, GAS, K-scale, SMDS); sex differences in prevalence and presentation; "
-        "school-based and family-based intervention options; safeguarding and consent "
-        "considerations. State instrument name and cut-off for every prevalence figure. "
-        "Distinguish normative heavy use from clinical impairment explicitly. "
+    "pediatric-screen": (
+        "[REPORT MODE: PEDIATRIC POPULATION REVIEW] Focus on the evidence base for the "
+        "0–18 age group. Address: developmental context and age-specific risk windows; "
+        "validated screening instruments for children and adolescents; sex differences "
+        "in prevalence and presentation; school-based and family-based intervention options; "
+        "safeguarding and consent considerations. State instrument name and cut-off for "
+        "every prevalence figure. Distinguish normative developmental variation from "
+        "clinically significant findings explicitly. "
     ),
-    "university-screen": (
-        "[REPORT MODE: UNIVERSITY POPULATION REVIEW] Focus on PIU, IGD, or smartphone "
-        "overuse in university and college students (18–25). Address: autonomy transition "
-        "as a risk window; academic performance and PIU interactions; sleep disruption in "
-        "student populations; ADHD comorbidity as a vulnerability factor; university "
-        "counselling service delivery models; peer-support and digital self-help options. "
+    "young-adult-screen": (
+        "[REPORT MODE: YOUNG ADULT POPULATION REVIEW] Focus on the evidence base for "
+        "university and college students (18–25). Address: the autonomy transition as "
+        "a risk window; academic performance interactions; sleep disruption; ADHD "
+        "comorbidity as a vulnerability factor; university counselling service delivery "
+        "models; peer-support and digital self-help options. "
         "Name instrument and cut-off for all prevalence claims. "
     ),
     "general-adult-screen": (
-        "[REPORT MODE: GENERAL ADULT POPULATION REVIEW] Focus on PIU constructs in adults "
-        "(18+), distinguishing from adolescent presentations where evidence differs. "
-        "Address: work-related compulsive internet use vs. leisure PIU; adult-normed "
-        "instruments (GPIUS2, IAT, BSMAS adult norms); occupational and relationship "
-        "impairment; workplace intervention and EAP referral pathways; age-related "
-        "decline in prevalence after 30. Name instrument and cut-off for all prevalence claims. "
+        "[REPORT MODE: GENERAL ADULT POPULATION REVIEW] Focus on the evidence base for "
+        "adults (18+), distinguishing from presentations in younger populations where "
+        "evidence differs. Address: occupational and relationship impairment; "
+        "adult-normed measurement instruments; workplace intervention and EAP referral "
+        "pathways. Name instrument and cut-off for all prevalence claims. "
     ),
     # ── Specialist prompt packs ───────────────────────────────────────────
     "grant-support": (
@@ -1121,7 +1120,7 @@ def execute(prompt: str):
     The swarm will search, reason, validate, and write outputs to the Drafts/ folder.
 
     Example:
-        python -m automation.main execute "Review the psychiatric literature on PIU."
+        python -m automation.main execute "Review the literature on [your research question]."
     """
     try:
         config = load_config()
@@ -1140,7 +1139,7 @@ def report(
         "--mode", "-m",
         help=(
             "Output format: scoping-review | narrative-review | evidence-brief | "
-            "adolescent-screen | university-screen | general-adult-screen | "
+            "pediatric-screen | young-adult-screen | general-adult-screen | "
             "grant-support | manuscript-draft | journalistic-brief"
         ),
     ),
@@ -1158,8 +1157,8 @@ def report(
       manuscript-draft      — Full peer-reviewable manuscript draft with all sections
 
     Population-specific screening modes:
-      adolescent-screen     — PIU/IGD review focused on the 10–18 age group
-      university-screen     — Review focused on university and college students (18–25)
+      pediatric-screen      — Review focused on the 0–18 age group
+      young-adult-screen    — Review focused on university and college students (18–25)
       general-adult-screen  — Review focused on adults 18+, adult-normed instruments
 
     Specialist prompt packs:
@@ -1167,8 +1166,8 @@ def report(
       journalistic-brief    — ~600-word plain-language press/communications brief
 
     Example:
-        python -m automation.main report "IGD in adolescents" --mode adolescent-screen
-        python -m automation.main report "CBT for PIU" --mode grant-support
+        python -m automation.main report "anxiety in adolescents" --mode pediatric-screen
+        python -m automation.main report "CBT for depression" --mode grant-support
     """
     try:
         config = load_config()

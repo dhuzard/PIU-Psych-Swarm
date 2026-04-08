@@ -280,6 +280,7 @@ See [TIPS.md](TIPS.md) for a detailed guide on:
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to report bugs, share domain examples, or contribute code |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 | [CLAUDE.md](CLAUDE.md) | Conventions for AI-assisted development on this codebase |
+| [docs/dev/](docs/dev/) | Internal planning documents (builder architecture, improvement tracker) |
 
 ---
 

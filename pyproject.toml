@@ -7,11 +7,15 @@ name = "research-swarm"
 version = "0.2.0"
 description = "A configurable multi-agent research swarm built on LangGraph — deploy your own autonomous research team for any scientific domain"
 readme = "README.md"
-license = {text = "MIT"}
+license = {file = "LICENSE"}
 requires-python = ">=3.10"
 authors = [
     {name = "Damien Huzard", email = "dhuzard@users.noreply.github.com"},
 ]
+
+[project.urls]
+Homepage = "https://github.com/dhuzard/piu-psych-swarm"
+"Bug Tracker" = "https://github.com/dhuzard/piu-psych-swarm/issues"
 
 dependencies = [
     "langchain>=0.3",
@@ -48,3 +52,10 @@ include = ["automation*"]
 [tool.ruff]
 line-length = 120
 target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]   # line length handled by formatter, not linter
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

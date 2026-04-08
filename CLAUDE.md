@@ -61,11 +61,20 @@ Copy-Item .env.example .env   # then edit .env with your keys
 
 ## Testing
 
-There is currently no automated test suite. When adding tests:
-- Place them in `tests/` at the repo root.
-- Use `pytest` (already in `[project.optional-dependencies] dev`).
+A minimal test suite exists in `tests/`. Run with `make test`.
+
 - Tests must not require real API keys — use `unittest.mock` to patch `requests.get` and LLM calls.
-- Run with: `make test` (add a `test` target to `Makefile` if it does not exist).
+- New tools should have a corresponding test in `tests/test_tools.py`.
+- New config-loading behavior should be tested in `tests/test_config.py`.
+- `pytest` is in `[project.optional-dependencies] dev` and installed by `make setup`.
+
+## Planning Documents
+
+Internal development planning documents live in `docs/dev/` and are not user-facing:
+- `docs/dev/INTERACTIVE_SWARM_BUILDER_PLAN.md` — builder architecture and roadmap
+- `docs/dev/Future_Improvements_TODO.md` — completed and pending improvements tracker
+
+Do not modify these files unless the user explicitly asks. Do not move them back to the repo root.
 
 ---
 

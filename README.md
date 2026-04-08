@@ -1,16 +1,28 @@
 # Research Swarm
 
-A configurable multi-agent research framework for autonomous scientific literature synthesis, built on [LangGraph](https://github.com/langchain-ai/langgraph).
+**Research Swarm automatically conducts literature reviews and writes research documents.**
 
-> Deploy a team of specialized AI agents that search, debate, validate, and document research findings for any scientific domain — without writing a single line of Python.
+Give it a research question. It deploys a team of AI agents that search PubMed, read papers, debate findings across specialisms, and write a structured document with full citations — no programming required.
+
+> **What you get:** A formatted Markdown document — suitable as a draft for a literature review, evidence brief, grant background, or manuscript section — saved to the `Drafts/` folder with a complete References section and an evidence audit trail.
+
+**Example research questions it handles well:**
+- *"Review the epidemiological literature on burnout in emergency physicians, 2015–2025."*
+- *"Summarize the evidence for digital CBT interventions in adolescent depression."*
+- *"Write a grant background section on air quality and cognitive development in children."*
+- *"Map the literature on antibiotic resistance in community-acquired pneumonia."*
+
+> **Not a coder?** Start with [QUICKSTART.md](QUICKSTART.md) → it takes about 20 minutes to get your first result. See [FAQ.md](FAQ.md) for common questions including cost estimates.
 
 ---
 
-## What It Does
+## How It Works
 
-Research Swarm coordinates a team of specialist AI agents through a supervised graph. Each agent has a focused role, a private knowledge base, and access to a curated set of research tools. An orchestrator routes sub-questions to the right specialists, a reviewer-2 checkpoint validates outputs before delivery, and a journalist agent writes the final structured document.
+Research Swarm coordinates a team of specialist AI agents through a supervised graph. Each agent has a focused role, a private knowledge base, and access to a curated set of research tools. An orchestrator routes sub-questions to the right specialists, a Reviewer-2 checkpoint validates outputs against configurable quality standards, and a Journalist agent writes the final structured document.
 
-The entire team is configured through a single YAML file — `swarm_config.yml`. You never need to modify Python code to deploy a new domain.
+The entire team is configured through a single YAML file — `swarm_config.yml`. You never need to modify Python code to deploy a new research domain.
+
+**Cost:** A typical research query costs **$1–$5** using GPT-4o. Complex multi-topic synthesis costs $5–$15. See [FAQ.md](FAQ.md) for detailed cost guidance and how to set spending limits.
 
 **Built-in tools:**
 
@@ -256,10 +268,23 @@ See [TIPS.md](TIPS.md) for a detailed guide on:
 
 ---
 
+## Documentation Index
+
+| Document | Purpose |
+| :--- | :--- |
+| [QUICKSTART.md](QUICKSTART.md) | Step-by-step setup guide including Windows PowerShell |
+| [FAQ.md](FAQ.md) | Common questions — cost, output quality, citations, API keys |
+| [TIPS.md](TIPS.md) | Best practices for team design, KB seeding, and reviewer configuration |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to report bugs, share domain examples, or contribute code |
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
+| [CLAUDE.md](CLAUDE.md) | Conventions for AI-assisted development on this codebase |
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
 
 ## Contributing
 
-Issues and pull requests are welcome. See the builder roadmap in [INTERACTIVE_SWARM_BUILDER_PLAN.md](INTERACTIVE_SWARM_BUILDER_PLAN.md) for planned features.
+Issues, bug reports, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and [INTERACTIVE_SWARM_BUILDER_PLAN.md](INTERACTIVE_SWARM_BUILDER_PLAN.md) for the planned feature roadmap.

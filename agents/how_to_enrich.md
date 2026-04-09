@@ -1,35 +1,53 @@
-# How to Enrich the Swarm 🧠
+# How to Enrich Your Swarm
 
-This repository is set up for a "Multi-Agent Swarm" simulation. You can "teach" the agents by adding documents to their Knowledge Base (KB) folders.
+Teach your agents by adding documents to their Knowledge Base (KB) folders. Each agent reads only its own KB, so place each document with the specialist most likely to use it.
 
 ## Directory Structure
+
 ```
 agents/
-    ├── ClinicalPsych/  (Diagnosis, impairment, comorbidity)
-    │   └── KB/     <-- Drop PDFs, MDs, or Text files here
-    ├── EpiScope/   (Prevalence, psychometrics, risk factors)
-    │   └── KB/     <-- Drop PDFs, MDs, or Text files here
-    ├── LitScout/   (Citation maps, shared bibliographies, landmark paper notes)
-    │   └── KB/     <-- Drop review papers, reference maps, or curated reading lists here
-    ├── NeuroCogs/  (Mechanisms, executive function, neuroimaging)
-    │   └── KB/     <-- Drop PDFs, MDs, or Text files here
-    ├── CarePath/   (Prevention, treatment, care models)
-    │   └── KB/     <-- Drop PDFs, MDs, or Text files here
-    └── DrNexus/    (Orchestrator)
-            └── KB/     <-- Drop project goals, scope notes, or shared bibliographies here
+    ├── Orchestrator/       (Scope notes, shared bibliographies, construct disambiguation)
+    │   └── KB/         <-- Drop project goals, scope definitions, or shared reference lists here
+    ├── Specialist1/        (Your first domain specialist — rename to match its role)
+    │   └── KB/         <-- Drop primary literature, review papers, or data notes here
+    ├── Specialist2/        (Your second domain specialist — rename to match its role)
+    │   └── KB/         <-- Drop mechanistic papers, theoretical frameworks, or methods notes here
+    ├── LitScout/           (Citation mapping, landmark papers, author-trail notes)
+    │   └── KB/         <-- Drop landmark reviews, meta-analyses, or reading lists here
+    └── Journalist/         (Style guides, report templates, reference formatting)
+            └── KB/         <-- Drop style guides or formatting templates here
 ```
 
-## How to Use
-1.  **Identify the Topic**:
-    -   Is it about *diagnosis, impairment, or comorbidity*? -> **ClinicalPsych**.
-    -   Is it about *prevalence, scales, or risk/protective factors*? -> **EpiScope**.
-    -   Is it about *landmark papers, citation trails, or author networks*? -> **LitScout**.
-    -   Is it about *executive function, reward, or neuroimaging*? -> **NeuroCogs**.
-    -   Is it about *prevention, CBT, pharmacotherapy, or school/family programs*? -> **CarePath**.
-2.  **Add the File**:
-    -   Copy the file (PDF, Markdown, Text) into the corresponding `KB/` folder.
-3.  **Notify the Swarm**:
-    -   In your chat with the AI, mention: "I have added [Filename] to ClinicalPsych's KB. Please digest it."
+## How to Add a Document
 
-## Agent Capabilities
-The active team is defined in `swarm_config.yml`. The ingestion and KB search flows use the configured personas, so the swarm can be retargeted to a new topic without mixing in unrelated legacy KB folders.
+1. **Identify the right agent** — ask: which specialist needs this information to do their job?
+2. **Drop the file** into the corresponding `KB/` folder. Supported formats: PDF, Markdown (`.md`), plain text (`.txt`).
+3. **Re-ingest** to vectorize the new document:
+
+   ```bash
+   make ingest
+   # or on Windows PowerShell:
+   .\.venv\Scripts\python -m automation.ingest
+   ```
+
+4. **Confirm** the KB is updated by running `make info` and checking that the new document appears.
+
+## Tips for High-Quality Knowledge Bases
+
+- **Prefer structured documents** — review papers, consensus statements, and methods papers give agents more reliable reference material than informal notes.
+- **Add context at the top** — begin each KB file with a one-paragraph summary of why it is relevant and what the agent should do with it (e.g., "Use this to verify prevalence figures when the main databases return conflicting estimates.").
+- **Keep KB files focused** — one topic per file. A 5-page focused note is more useful than a 100-page omnibus document.
+- **Name files descriptively** — `cbt_intervention_trials_2020_2024.md` is more useful than `notes.md`.
+- **Version your KB** — if you update a KB file substantially, commit the change to git so the audit trail reflects which version the agent had access to.
+
+## Agent-Specific Guidance
+
+| Agent | Best document types |
+| :--- | :--- |
+| Orchestrator | Project scope notes, construct disambiguation, shared bibliographies |
+| Specialist1 | Primary studies, review papers, instrument manuals |
+| Specialist2 | Mechanism papers, theoretical frameworks, methods literature |
+| LitScout | Landmark reviews, meta-analyses, citation maps |
+| Journalist | Style guides, report templates, formatting conventions |
+
+Rename the agent folders and update this table to match the actual role names in your `swarm_config.yml`.

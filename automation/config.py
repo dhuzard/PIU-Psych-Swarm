@@ -2,7 +2,7 @@
 config.py — Configuration Engine for the Research Swarm
 
 Loads swarm_config.yml and dynamically builds:
-  - System prompts (from Jinja2 templates + persona files)
+  - System prompts (from persona files)
   - Reviewer-2 prompts (from banned_words, required_elements, tone)
   - Tool registries (from module + function references)
   - LLM model instances (from provider + model name)
@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from jinja2 import Template
 from rich.console import Console
 
 console = Console()
@@ -25,23 +24,6 @@ console = Console()
 # Resolve the project root (one level above automation/)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = PROJECT_ROOT / "swarm_config.yml"
-
-
-# ── Default System Prompt Template ───────────────────
-# Used if no system_prompt_template key exists in the config.
-DEFAULT_TEMPLATE = """\
-You are the {{ swarm.name }}, an orchestration of specialist agents:
-{%- for p in personas %}
-- {{ p.icon }} **{{ p.name }}** ({{ p.role }})
-{%- endfor %}
-
-CRITICAL DIRECTIVE: After every search, you MUST call the traceability tool
-to log findings using epistemic tags: {{ epistemic_tags | join(', ') }}.
-
-FORMATTING: Include formal in-text citations and a complete Reference section.
-
-Use your tools to fulfill the user request precisely.
-"""
 
 
 def load_config(config_path: Path = CONFIG_PATH) -> dict:
@@ -57,7 +39,7 @@ def load_config(config_path: Path = CONFIG_PATH) -> dict:
         config = yaml.safe_load(f)
 
     # Validate required top-level keys
-    required_keys = ["swarm", "model", "personas", "tools", "reviewer"]
+    required_keys = ["swarm", "orchestrator", "model", "personas", "tools", "reviewer"]
     missing = [k for k in required_keys if k not in config]
     if missing:
         raise ValueError(
@@ -78,33 +60,6 @@ def load_persona_content(persona_file: str) -> str:
         console.print(f"[yellow]Warning: Persona file not found: {path}[/yellow]")
         return ""
     return path.read_text(encoding="utf-8")
-
-
-def build_system_prompt(config: dict) -> str:
-    """Assemble the system prompt from config + persona files via Jinja2.
-
-    LEGACY — not called by the multi-agent supervisor architecture.
-    Each agent node builds its own focused prompt via build_agent_system_prompt().
-    Retained for backward compatibility with custom scripts and examples.
-    """
-    # Enrich persona dicts with their loaded file contents
-    personas_with_content = []
-    for p in config["personas"]:
-        p_copy = dict(p)
-        p_copy["content"] = load_persona_content(p.get("persona_file", ""))
-        personas_with_content.append(p_copy)
-
-    # Render the Jinja2 template
-    template_str = config.get("system_prompt_template", DEFAULT_TEMPLATE)
-    template = Template(template_str)
-
-    return template.render(
-        swarm=config["swarm"],
-        personas=personas_with_content,
-        tools=config["tools"],
-        epistemic_tags=config.get("epistemic_tags", ["[FACT]", "[INFERENCE]"]),
-        reviewer=config["reviewer"],
-    )
 
 
 def build_reviewer_prompt(config: dict) -> str:
@@ -198,9 +153,8 @@ def load_tools_for_persona(config: dict, persona_cfg: dict) -> list:
 def build_agent_system_prompt(persona_cfg: dict, epistemic_tags: list = None) -> str:
     """Build a focused system prompt for a single agent node.
 
-    Unlike build_system_prompt(), this injects only this agent's persona
-    content — not all agents — keeping per-call token cost proportional
-    to one persona rather than the full swarm.
+    Injects only this agent's persona content — not all agents — keeping
+    per-call token cost proportional to one persona rather than the full swarm.
     """
     name = persona_cfg.get("name", "Agent")
     icon = persona_cfg.get("icon", "🤖")

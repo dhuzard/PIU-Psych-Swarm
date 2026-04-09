@@ -4,7 +4,7 @@ graph.py — True Multi-Agent LangGraph State Machine (Supervisor Pattern)
 Architecture
 ------------
 Each persona is a separate LangGraph node with its own system prompt and
-scoped tool set. Dr. Nexus (orchestrator) routes between specialists using
+scoped tool set. The configured orchestrator routes between specialists using
 structured output decisions. Token use is optimised by injecting only the
 relevant context into each agent call rather than broadcasting the full
 message history or all persona files to every node.

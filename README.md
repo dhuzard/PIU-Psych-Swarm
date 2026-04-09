@@ -1,48 +1,65 @@
-# PIU Psych Swarm
+# Research Swarm
 
-A configurable multi-agent framework for psychiatric research on problematic internet use.
+**Research Swarm automatically conducts literature reviews and writes research documents.**
 
-> The repository is preconfigured for psychiatric and behavioral-science work on problematic internet use, while remaining configurable for other research domains.
+Give it a research question. It deploys a team of AI agents that search PubMed, read papers, debate findings across specialisms, and write a structured document with full citations — no programming required.
 
-## Focus
+> **What you get:** A formatted Markdown document — suitable as a draft for a literature review, evidence brief, grant background, or manuscript section — saved to the `Drafts/` folder with a complete References section and an evidence audit trail.
 
-PIU Psych Swarm is a LangGraph-based multi-agent system that researches, debates, and documents psychiatric questions about problematic internet use, including internet gaming disorder where relevant.
+**Example research questions it handles well:**
+- *"Review the epidemiological literature on burnout in emergency physicians, 2015–2025."*
+- *"Summarize the evidence for digital CBT interventions in adolescent depression."*
+- *"Write a grant background section on air quality and cognitive development in children."*
+- *"Map the literature on antibiotic resistance in community-acquired pneumonia."*
 
-The repository is currently optimized for:
+> **Not a coder?** Start with [QUICKSTART.md](QUICKSTART.md) → it takes about 20 minutes to get your first result. See [FAQ.md](FAQ.md) for common questions including cost estimates.
 
-- clinically cautious synthesis that separates high engagement from impairment
-- literature-backed summaries with in-text citations and references
-- reusable local knowledge bases for subagent-specific expertise
-- structured drafting workflows for reviews, evidence briefs, and study notes
+---
+
+## How It Works
+
+Research Swarm coordinates a team of specialist AI agents through a supervised graph. Each agent has a focused role, a private knowledge base, and access to a curated set of research tools. An orchestrator routes sub-questions to the right specialists, a Reviewer-2 checkpoint validates outputs against configurable quality standards, and a Journalist agent writes the final structured document.
+
+The entire team is configured through a single YAML file — `swarm_config.yml`. You never need to modify Python code to deploy a new research domain.
+
+**Cost:** A typical research query costs **$1–$5** using GPT-4o. Complex multi-topic synthesis costs $5–$15. See [FAQ.md](FAQ.md) for detailed cost guidance and how to set spending limits.
+
+**Built-in tools:**
+
+| Tool | Purpose |
+| :--- | :--- |
+| `search_pubmed` | Search peer-reviewed biomedical and scientific literature |
+| `search_semantic_scholar` | Search preprints, CHI papers, and recent publications |
+| `trace_literature_network` | Expand a seed paper via its references and lead authors |
+| `search_knowledge_base` | Search local vectorized KB documents in agents/*/KB/ |
+| `scrape_webpage` | Pull full-text content from URLs |
+| `you_research` | Multi-step web synthesis with inline citations |
+| `lookup_doi` | Full citation metadata via Europe PMC and Crossref (no API key) |
+| `append_traceability_matrix` | Log evidence and epistemic status to audit trail |
+| `write_manuscript_section` | Write markdown outputs into Drafts/ |
+| `git_commit_snapshot` | Version-control swarm outputs for reproducibility |
+
+---
 
 ## Quickstart
 
 ### Linux or Windows WSL
 
-Requirements:
-
-- Python 3.10+
-- `python3-venv`
-- `make`
+Requirements: Python 3.10+, `python3-venv`, `make`
 
 ```bash
 git clone https://github.com/dhuzard/piu-psych-swarm.git
 cd piu-psych-swarm
 make setup
-make ingest
-make run PROMPT="Review the psychiatric literature on problematic internet use in adolescents, including prevalence, comorbidity, mechanisms, and interventions."
 ```
 
-If `make setup` fails because `python3` is missing, install it first. On Ubuntu or WSL:
+On Ubuntu or WSL, install prerequisites first if needed:
 
 ```bash
-sudo apt update
-sudo apt install -y python3 python3-venv make
+sudo apt update && sudo apt install -y python3 python3-venv make
 ```
 
 ### Native Windows (PowerShell)
-
-Use PowerShell for native Windows setup. This avoids requiring GNU Make.
 
 ```powershell
 git clone https://github.com/dhuzard/piu-psych-swarm.git
@@ -51,225 +68,225 @@ py -3 -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\python -m pip install -e ".[dev]"
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-.\.venv\Scripts\python -m automation.ingest
-.\.venv\Scripts\python -m automation.main execute "Review the psychiatric literature on problematic internet use in adolescents, including prevalence, comorbidity, mechanisms, and interventions."
 ```
+
+### Add API Keys
+
+Copy `.env.example` to `.env` and add your keys:
+
+```env
+OPENAI_API_KEY=sk-your-key-here
+YOU_API_KEY=your-you-dot-com-key-here   # optional — enables live web search
+```
+
+### Build the Knowledge Base and Run
+
+```bash
+make ingest    # vectorize KB documents
+make info      # inspect the active team
+make run PROMPT="Your research question here"
+```
+
+See [QUICKSTART.md](QUICKSTART.md) for the full step-by-step setup guide.
+
+---
 
 ## Create Your Own Swarm
 
-The repository now includes the first eight phases of an interactive swarm builder.
-
-Use the builder-backed command:
+### Option 1: Interactive Builder
 
 ```bash
 python -m automation.main init
 ```
 
-Use the reusable blueprint command group when you want to save a team and recreate it in another repository:
+The wizard guides you through naming your swarm, defining specialist personas, configuring tools, and setting reviewer constraints.
+
+### Option 2: Edit the Template Directly
+
+Open `swarm_config.yml` and follow the inline comments:
+
+1. Set the swarm name and domain description.
+2. Rename the personas to match your team (e.g., rename `Specialist1` to `EpiScope` or `PolicyAnalyst`).
+3. Rename the corresponding folder in `agents/` to match.
+4. Edit each `agents/*/persona.md` to define the agent's focus and behavior rules.
+5. Drop literature documents into `agents/*/KB/` and run `make ingest`.
+6. Customize the reviewer constraints in `swarm_config.yml` for your domain's standards.
+
+### Option 3: Start from a Blueprint
 
 ```bash
-python -m automation.main blueprint --help
+# List available starter blueprints
+python -m automation.main blueprints
+
+# Initialize from a blueprint
+python -m automation.main init --no-interactive --template literature-mapping --domain "Climate Science" --name "Climate Science Swarm"
 ```
 
-Current capabilities:
+Available blueprints: `research-core`, `literature-mapping`, `intervention-lab`, `rapid-brief`
 
-- create a valid `swarm_config.yml` from a typed builder spec
-- generate persona markdown files and `agents/*/KB/` folders
-- start from named blueprints such as `research-core`, `literature-mapping`, `intervention-lab`, and `rapid-brief`
-- list available blueprints with `python -m automation.main blueprints`
-- define specialist personas interactively with richer prompts when you do not want a preset blueprint
-- preview file-level diffs before writes occur
-- inspect the active swarm with `python -m automation.main preview`
-- validate the active swarm with `python -m automation.main doctor`
-- add a persona with `python -m automation.main persona add`
-- edit a persona with `python -m automation.main persona edit`
-- configure orchestration and HITL with `python -m automation.main team configure`
-- configure reviewer policy with `python -m automation.main review configure`
-- configure the primary model with `python -m automation.main model configure`
-- configure swarm metadata with `python -m automation.main metadata configure`
-- curate the active tool registry with `python -m automation.main tools configure`
-- add a tool with `python -m automation.main tools add`
-- edit a tool with `python -m automation.main tools edit`
-- remove a tool with `python -m automation.main tools remove`
-- auto-repair safe filesystem issues with `python -m automation.main doctor --fix`
-- run the legacy `python -m automation.main scaffold "Domain"` command as a deprecated alias to builder-backed init
-- export the current swarm as a reusable blueprint with `python -m automation.main blueprint export`
-- import a reusable blueprint into another repo with `python -m automation.main blueprint import ./blueprints/MyTeam.swarm-blueprint.yml`
+---
 
-For a non-interactive starter swarm:
+## Team Structure
+
+The default template ships with five generic personas. Rename and customize them for your domain:
+
+| Agent | Icon | Default Role |
+| :--- | :--- | :--- |
+| Orchestrator | 👑 | Coordinates the team, decomposes tasks, synthesizes findings |
+| Specialist1 | 🔬 | First domain specialist — configure for your primary expertise area |
+| Specialist2 | 📊 | Second domain specialist — configure for your secondary expertise area |
+| LitScout | 📚 | Citation chaining, landmark-paper identification, author-trail expansion |
+| Journalist | ✍️ | Neutral, structured final output and documentation |
+
+See `agents/*/persona.md` for each agent's instructions, and `agents/how_to_enrich.md` for a guide on populating knowledge bases.
+
+---
+
+## Swarm Builder Commands
 
 ```bash
-python -m automation.main init --no-interactive --domain "Climate Science" --name "Climate Science Swarm"
+python -m automation.main init                  # create a new swarm interactively
+python -m automation.main blueprints            # list available blueprints
+python -m automation.main preview               # inspect the active team and tool map
+python -m automation.main doctor                # validate config, files, KB, and tool wiring
+python -m automation.main doctor --fix          # auto-repair safe filesystem issues
+python -m automation.main persona add           # add a persona interactively
+python -m automation.main persona edit          # edit an existing persona
+python -m automation.main team configure        # set orchestrator, routing, and HITL
+python -m automation.main review configure      # set reviewer rules, bans, and required elements
+python -m automation.main model configure       # change provider, model name, temperature
+python -m automation.main metadata configure    # change swarm name and description
+python -m automation.main tools configure       # curate the tool registry
+python -m automation.main tools add             # add a tool entry
+python -m automation.main blueprint export      # save current swarm as a portable blueprint
+python -m automation.main blueprint import FILE # generate a swarm from a blueprint file
 ```
 
-For a non-interactive blueprint-based swarm:
+---
+
+## Report Modes
+
+Use `python -m automation.main report` to get structured output in a specific format:
 
 ```bash
-python -m automation.main init --no-interactive --template literature-mapping --domain "Behavioral Addiction" --name "Behavioral Addiction Map"
+python -m automation.main report "Your research question" --mode scoping-review
+python -m automation.main report "Your research question" --mode evidence-brief
+python -m automation.main report "Your research question" --mode grant-support
+python -m automation.main report "Your research question" --mode manuscript-draft
 ```
 
-### Reusable Blueprints
+Available modes: `scoping-review`, `narrative-review`, `evidence-brief`, `manuscript-draft`, `grant-support`, `journalistic-brief`, `pediatric-screen`, `young-adult-screen`, `general-adult-screen`
 
-The export/import flow is for custom teams you want to carry across repos without manually copying `swarm_config.yml` and each `agents/*/persona.md` file.
+---
 
-1. Export the current swarm into a portable blueprint file.
-2. Commit or share that blueprint file.
-3. Import it inside another repo and optionally override the new swarm name, description, or domain.
+## Reviewer-2 Adversarial Checkpoint
 
-Default behavior:
+Every swarm run passes through a Reviewer-2 checkpoint before final output. The reviewer checks for banned words, required structural elements, and domain-specific rejection patterns. Configure it in `swarm_config.yml` under `reviewer:`.
 
-- `swarm blueprint export` writes a YAML blueprint under `./blueprints/`
-- `swarm blueprint import` reads that file and regenerates `swarm_config.yml` plus the persona files in the target repo
-- imported blueprints reuse the exact tool registry, team structure, and reviewer/HITL settings captured in the exported typed spec
+For maximum adversarial diversity, set the reviewer to a different model provider than the research agents — a Claude reviewer challenging GPT-4o output (or vice versa) introduces genuinely different training biases. See the commented-out examples in `swarm_config.yml`.
 
-Example:
+---
 
-```bash
-python -m automation.main blueprint export --name "Behavioral Addiction Team"
-python -m automation.main blueprint import ./blueprints/BehavioralAddictionTeam.swarm-blueprint.yml --domain "Sleep Research" --name "Sleep Research Team"
+## Human-in-the-Loop
+
+Enable HITL checkpoints in `swarm_config.yml` to pause the swarm at key decision points:
+
+```yaml
+hitl:
+  enabled: true
+  checkpoints:
+    - pre_flight       # confirm scope before the graph starts
+    - post_plan        # approve the orchestrator's routing decision
+    - pre_journalist   # add framing instructions before the Journalist writes
+    - on_rejection     # choose REVISE / OVERRIDE when Reviewer-2 rejects
 ```
 
-Useful options:
-
-- `python -m automation.main blueprint export --output ./blueprints/custom-team.swarm-blueprint.yml --overwrite`
-- `python -m automation.main blueprint import ./blueprints/custom-team.swarm-blueprint.yml --description "Focused evidence-mapping swarm" --yes`
-
-## Persona Squad
-
-| Agent | Icon | Role | Technical Focus |
-| :--- | :--- | :--- | :--- |
-| Dr. Nexus | 👑 | Orchestrator | Coordination, synthesis, and reference management |
-| ClinicalPsych | 🧠 | Clinical specialist | Diagnosis, impairment, and comorbidity |
-| EpiScope | 📊 | Epidemiology specialist | Prevalence, psychometrics, risk and protective factors |
-| LitScout | 📚 | Literature specialist | Citation chaining, reference mining, and author-trail expansion |
-| NeuroCogs | 🧪 | Mechanisms specialist | Reward, executive control, neurocognition, imaging |
-| CarePath | 🛟 | Intervention specialist | Prevention, treatment, and care pathways |
-| Journalist | ✍️ | Scribe | Neutral, professional documentation and reporting |
-
-## Typical Workflow
-
-```bash
-make ingest
-make info
-make run PROMPT="Create a scoping review outline for problematic internet use in university students."
-```
-
-Useful working files:
-
-- Drafts/piu_prompt_set.md
-- Drafts/piu_study_workflow_template.md
-- Article_Draft.md
-- Knowledge_Traceability_Matrix.md
-
-## Core Tooling
-
-| Tool | Purpose |
-| :--- | :--- |
-| search_pubmed | Search peer-reviewed biomedical and psychiatric literature |
-| trace_literature_network | Expand a major paper via its references and lead authors |
-| search_you_engine | Search the live web |
-| search_knowledge_base | Search local PIU literature packets in agents/*/KB/ |
-| scrape_webpage | Pull full-text content from URLs |
-| append_traceability_matrix | Log evidence and epistemic status |
-| write_manuscript_section | Write markdown outputs into Drafts/ |
+---
 
 ## Repository Layout
 
-- swarm_config.yml: Active swarm definition
-- agents/: Personas and local knowledge bases
-- automation/: Runtime, tools, ingestion, and graph logic
-- Drafts/: Prompt packs, workflow templates, and generated outputs
-- Knowledge_Traceability_Matrix.md: Running audit trail for evidence use
+```
+research-swarm/
+├── swarm_config.yml          # Active swarm definition — edit this to customize
+├── agents/                   # Personas and local knowledge bases
+│   ├── Orchestrator/
+│   │   ├── persona.md        # Orchestrator instructions
+│   │   └── KB/               # Drop shared bibliographies and scope notes here
+│   ├── Specialist1/          # Rename to match your domain
+│   ├── Specialist2/          # Rename to match your domain
+│   ├── LitScout/             # Literature mapping specialist
+│   ├── Journalist/           # Output writer
+│   └── how_to_enrich.md      # Guide for populating KB folders
+├── automation/               # Framework code — no edits needed for customization
+│   ├── graph.py              # LangGraph multi-agent state machine
+│   ├── config.py             # YAML config loader and validator
+│   ├── tools.py              # All built-in tool implementations
+│   ├── ingest.py             # KB vectorization (ChromaDB)
+│   ├── main.py               # CLI entry point (Typer)
+│   └── builder/              # Interactive swarm builder
+├── examples/                 # Reference implementations for specific domains
+│   └── piu_psychiatry/       # Psychiatric research on problematic internet use
+├── Drafts/                   # Swarm outputs and generated documents
+├── Knowledge_Traceability_Matrix.md  # Running evidence audit trail (auto-generated)
+├── pyproject.toml
+├── Makefile
+├── docker-compose.yml
+└── .env.example
+```
 
-## Builder Roadmap
+---
 
-The interactive swarm builder is now the main configuration surface. The remaining work is product polish: richer blueprint packs, reusable policy presets, and higher-level template bundles on top of the existing typed builder core.
+## Examples
 
-Implemented in Phase 1:
+See the `examples/` folder for complete, ready-to-use swarm configurations:
 
-- a typed `SwarmSpec` builder core
-- file generation for config, personas, and KB folders
-- a first `swarm init` command backed by that builder
+- **`examples/piu_psychiatry/`** — A complete six-specialist psychiatric research team for problematic internet use (PIU), with pre-populated knowledge bases, curated prompt sets, and domain-specific reviewer constraints. See its [README](examples/piu_psychiatry/README.md).
+- `examples/climate_science/` — *(configuration stub — full agents/ and README coming soon)*
+- `examples/financial_modeling/` — *(configuration stub — full agents/ and README coming soon)*
+- `examples/legal_tech/` — *(configuration stub — full agents/ and README coming soon)*
 
-Implemented in Phase 2:
+To deploy the PIU psychiatry example:
 
-- richer interactive prompts with `Questionary` fallback to plain prompts when needed
-- `swarm preview` for readable inspection of the current team and tool registry
-- `swarm doctor` for config, file, KB, tool-import, and environment checks
+```bash
+cp examples/piu_psychiatry/swarm_config.yml .
+cp -r examples/piu_psychiatry/agents .
+make ingest
+make run PROMPT="Your first question"
+```
 
-Implemented in Phase 3:
+To contribute a complete example for another domain, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-- file-level diff previews before builder writes
-- `swarm persona add` for adding a persona into an existing swarm
-- `swarm persona edit` for editing an existing persona safely
-- `swarm doctor --fix` for safe repairs of missing KB directories and `.gitkeep` files
+---
 
-Implemented in Phase 4:
+## Tips for Effective Swarms
 
-- `swarm team configure` for orchestrator, routing, and HITL configuration
-- `swarm review configure` for reviewer tone, bans, required elements, and model overrides
-- non-interactive option-driven config updates backed by the same builder core used by the interactive flow
+See [TIPS.md](TIPS.md) for a detailed guide on:
+- Designing a well-scoped specialist team
+- Pre-loading knowledge bases with the right documents
+- Seeding literature searches with key authors and landmark papers
+- Configuring the reviewer for your domain's epistemological standards
+- Getting the most out of the literature mapping tools
 
-Implemented in Phase 5:
+---
 
-- `swarm model configure` for provider, model name, temperature, and env-key changes
-- `swarm metadata configure` for name, description, output paths, and epistemic tags
-- `swarm tools configure` for active tool-registry curation with persona-tool synchronization
+## Documentation Index
 
-Implemented in Phase 6:
+| Document | Purpose |
+| :--- | :--- |
+| [QUICKSTART.md](QUICKSTART.md) | Step-by-step setup guide including Windows PowerShell |
+| [FAQ.md](FAQ.md) | Common questions — cost, output quality, citations, API keys |
+| [TIPS.md](TIPS.md) | Best practices for team design, KB seeding, and reviewer configuration |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to report bugs, share domain examples, or contribute code |
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
+| [CLAUDE.md](CLAUDE.md) | Conventions for AI-assisted development on this codebase |
+| [docs/dev/](docs/dev/) | Internal planning documents (builder architecture, improvement tracker) |
 
-- `swarm tools add` for adding built-in or custom tool registry entries
-- `swarm tools edit` for updating existing tool registry entries
-- `swarm tools remove` for removing tool registry entries while protecting personas from ending up tool-less
+---
 
-Implemented in Phase 7:
+## License
 
-- named swarm blueprints with `swarm blueprints` and `swarm init --template ...`
-- the older `swarm scaffold` flow now routes through the same builder-backed generation path as `swarm init`
-- stronger `swarm doctor` semantic validation for duplicate roles, routing limits, empty KB directories, journalist/orchestrator capability mismatches, and reviewer-rule consistency
+MIT — see [LICENSE](LICENSE) for details.
 
-Implemented in Phase 8:
+## Contributing
 
-- `swarm blueprint export` for saving the current typed swarm spec as a portable YAML blueprint file
-- `swarm blueprint import` for generating a swarm from that blueprint in another repo, with optional name, description, and domain overrides
-- blueprint files written under `./blueprints/` by default so custom teams can be versioned and shared directly
-
-Recommended next implementation direction:
-
-- Keep `Typer` as the command surface because the repo already uses it successfully.
-- Add `Rich` for previews, validation panels, and diff-style summaries.
-- Keep `Questionary` and extend the wizard into persona editing flows.
-- Keep the builder engine separate from the CLI so the same core can later power a richer TUI or web UI.
-- Add richer blueprint packs, policy presets, and shared template bundles on top of the existing targeted edit commands.
-
-Planned command family:
-
-- `swarm init`: create a new swarm from an interactive wizard
-- `swarm persona add`: create a persona with role, tools, KB folder, and behavior template
-- `swarm persona edit`: update an existing persona interactively
-- `swarm team configure`: choose orchestrator, journalist, routing limits, and HITL settings
-- `swarm review configure`: set reviewer rules, banned words, and required elements
-- `swarm model configure`: change provider, model name, temperature, and env key
-- `swarm metadata configure`: change swarm name, description, domain label, output paths, and epistemic tags
-- `swarm tools configure`: curate the active tool registry used by the current swarm
-- `swarm tools add`: add a built-in or custom tool registry entry
-- `swarm tools edit`: update a tool registry entry
-- `swarm tools remove`: remove a tool registry entry safely
-- `swarm blueprints`: list the available starter blueprints
-- `swarm blueprint export`: save the current swarm as a portable reusable blueprint
-- `swarm blueprint import`: generate a swarm from a portable blueprint file
-- `swarm preview`: render the current team, tool map, and config summary
-- `swarm doctor`: validate the generated config, persona files, KB layout, tool wiring, routing assumptions, and reviewer semantics
-- `swarm doctor --fix`: repair the safe filesystem issues automatically
-
-Design principle:
-
-Build a schema-driven team-creation module first, then place an interactive CLI on top of it. The solid foundation is the model and validator layer, not the prompt loop.
-
-See [INTERACTIVE_SWARM_BUILDER_PLAN.md](INTERACTIVE_SWARM_BUILDER_PLAN.md) for the detailed architecture and implementation plan.
-
-## Notes
-
-- The active team is controlled by swarm_config.yml.
-- KB ingestion and KB search now follow the configured personas rather than every folder under agents/.
-- The repository is currently curated for PIU-focused psychiatric research workflows.
+Issues, bug reports, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

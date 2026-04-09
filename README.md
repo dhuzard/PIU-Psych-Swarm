@@ -228,7 +228,6 @@ research-swarm/
 │   └── piu_psychiatry/       # Psychiatric research on problematic internet use
 ├── Drafts/                   # Swarm outputs and generated documents
 ├── Knowledge_Traceability_Matrix.md  # Running evidence audit trail (auto-generated)
-├── schemas/                  # Optional metadata schemas
 ├── pyproject.toml
 ├── Makefile
 ├── docker-compose.yml

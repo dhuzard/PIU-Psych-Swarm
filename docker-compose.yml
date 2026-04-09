@@ -9,7 +9,8 @@ services:
       - ./Drafts:/app/Drafts
       - ./agents:/app/agents
       - ./swarm_config.yml:/app/swarm_config.yml
-      - ./Knowledge_Traceability_Matrix.md:/app/Knowledge_Traceability_Matrix.md
+      # Knowledge_Traceability_Matrix.md is created inside the image (see Dockerfile).
+      # To retrieve it after a run: docker compose cp swarm:/app/Knowledge_Traceability_Matrix.md .
     # Override CMD to execute a research task
     # Usage: docker compose run swarm execute "Your prompt here"
     command: ["info"]

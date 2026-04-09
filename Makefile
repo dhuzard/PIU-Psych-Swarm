@@ -1,4 +1,4 @@
-.PHONY: setup run ingest info scaffold doctor lint format test clean help
+.PHONY: setup run ingest info doctor lint format test clean help
 
 # Research Swarm — Makefile
 
@@ -37,7 +37,6 @@ help:
 	@echo   make ingest      Vectorize documents from active agents/*/KB/ folders
 	@echo   make info        Display the current swarm configuration
 	@echo   make doctor      Validate config, files, KB, and tool wiring
-	@echo   make scaffold    Scaffold a new domain (set DOMAIN="your domain")
 	@echo   make lint        Run ruff linter on automation/
 	@echo   make format      Run ruff formatter on automation/
 	@echo   make test        Run the test suite
@@ -75,14 +74,6 @@ info:
 doctor:
 	$(PYTHON) -m automation.main doctor
 
-scaffold:
-ifndef DOMAIN
-	@echo ERROR: Please provide a domain name.
-	@echo Usage: make scaffold DOMAIN="Climate Science"
-	@exit /b 1
-endif
-	$(PYTHON) -m automation.main scaffold "$(DOMAIN)"
-
 lint:
 	$(PYTHON) -m ruff check automation/
 
@@ -90,12 +81,6 @@ format:
 	$(PYTHON) -m ruff format automation/
 
 test:
-	@if [ ! -d tests ]; then \
-		echo "No tests/ directory found."; \
-		echo "Create it with: mkdir tests/"; \
-		echo "See CONTRIBUTING.md for testing guidance."; \
-		exit 0; \
-	fi
 	$(PYTHON) -m pytest tests/ -v
 
 clean:

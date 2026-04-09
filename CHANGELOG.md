@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [0.2.0] — 2025
+## [0.2.0] — 2026-04-09
 
 ### Added
 - **Interactive swarm builder** (Phases 1–8): `swarm init`, `persona add/edit`, `team configure`, `review configure`, `model configure`, `metadata configure`, `tools configure/add/edit/remove`, `blueprint export/import`, `doctor`, `preview`

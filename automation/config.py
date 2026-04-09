@@ -39,7 +39,7 @@ def load_config(config_path: Path = CONFIG_PATH) -> dict:
         config = yaml.safe_load(f)
 
     # Validate required top-level keys
-    required_keys = ["swarm", "model", "personas", "tools", "reviewer"]
+    required_keys = ["swarm", "orchestrator", "model", "personas", "tools", "reviewer"]
     missing = [k for k in required_keys if k not in config]
     if missing:
         raise ValueError(

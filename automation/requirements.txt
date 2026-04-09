@@ -1,9 +1,0 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# DEPRECATED: This file is NOT the canonical dependency list.
-#
-# Use pyproject.toml instead. Running `make setup` installs all dependencies
-# via `pip install -e ".[dev]"` from pyproject.toml.
-#
-# This file is kept only for historical reference and will be removed in a
-# future release.
-# ─────────────────────────────────────────────────────────────────────────────

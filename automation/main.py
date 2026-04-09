@@ -1186,7 +1186,7 @@ def report(
     _run_graph(config, REPORT_MODES[mode] + prompt)
 
 
-@app.command()
+@app.command(hidden=True)
 def scaffold(domain: str):
     """
     Deprecated alias for `swarm init --no-interactive`.
